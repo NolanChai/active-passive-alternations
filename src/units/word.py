@@ -51,3 +51,12 @@ class Word(Token):
         if new_form:
             self['form'] = new_form[0]
             self['inflection'] = new_inflection
+            
+    def deep_copy(self):
+        """Create a deep copy of the Word object. Does not include children.
+
+        Returns:
+            Word: A new Word object that is a deep copy of the original.
+        """
+        return Word(token_dict=dict(self), 
+                    inflection=self['inflection'])

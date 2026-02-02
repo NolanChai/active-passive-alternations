@@ -4,6 +4,29 @@ import conllu
 from conllu import Token, TokenList
 from .word import Word
 
+def switch_pronoun(const):
+    """ Switch relevant pronouns from subject to object.
+
+    Args:
+        const (list): list of Word objects to process
+    """
+    pron_key = {
+        "i": "me",
+        "he": "him",
+        "she": "her",
+        "we": "us",
+        "they": "them",
+        "me": "I",
+        "him": "he",
+        "her": "she",
+        "us": "we",
+        "them": "they"
+    }
+    for w in const:
+        # print(w['form'], w['deprel'])
+        if w['deprel'] in ['obl:agent', 'nsubj:pass'] and w['form'].lower() in pron_key:
+            w['form'] = pron_key[w['form'].lower()]
+
 def build_subtree(root,
                   upos: list = None,
                   deprel: list = None):
@@ -34,7 +57,7 @@ def build_subtree(root,
         else:
             to_visit += node['children']
     subtree = sorted(subtree, key=lambda w: w['id'])
-    return subtree
+    return Sentence(subtree)
 
 class Sentence(list[Word]):
     """
@@ -61,6 +84,8 @@ class Sentence(list[Word]):
         for word in self:
             head_id = word['head']
             if head_id:
+                if head_id not in id_to_word:
+                    continue
                 head_word = id_to_word[head_id]
                 head_word['children'].append(word)
                 
@@ -70,15 +95,82 @@ class PassiveSentence(Sentence):
         if not self.is_passive:
             raise ValueError("The provided sentence is not passive.")
         
-        # Find passive subject
+        # Extract core
         self.passive_subject, self.passive_subject_word = self.find_pass_subj()
-        
-        # Find main verb
         self.verb, self.verb_word = self.find_verb()
-        
-        # Find agent
         self.agent, self.agent_word = self.find_pass_agent()
+    
+    def depassivize(self):
+        """Convert the passive sentence to active voice."""
+        words = [w.deep_copy() for w in self]
         
+        # Get indices for passive components
+        verb_span = (words.index(self.verb[0].deep_copy()), words.index(self.verb[-1].deep_copy()))
+        subj_span = (words.index(self.passive_subject[0].deep_copy()), words.index(self.passive_subject[-1].deep_copy()))
+        agent_span = (words.index(self.agent[0].deep_copy()), words.index(self.agent[-1].deep_copy()))
+
+        # reinflect/adjust words
+        verb_const = self.activize_verb()
+        subj_const = self.activize_subj()
+        agent_const = self.activize_agent()
+
+        # Reorder sentence
+        activized_sentence = (words[0:subj_span[0]]
+            + agent_const
+            + words[subj_span[1]+1:verb_span[0]]
+            + verb_const
+            + subj_const
+            + words[verb_span[1]+1:agent_span[0]]
+            + words[agent_span[1]+1:]
+        )
+        activized_sentence = [w.deep_copy() for w in activized_sentence]
+        return Sentence(activized_sentence)
+        
+    def activize_verb(self):
+        """Convert the passive verb to active voice."""
+        # deep copy to not modify original
+        verb_const = [w.deep_copy() for w in self.verb]
+        verb_word = self.verb_word.deep_copy()
+        
+        auxpass = next(filter(lambda w: w['deprel'] == 'aux:pass', verb_const), None)
+        if auxpass is None:
+            raise ValueError("No auxiliary passive verb found.")
+        verb_const.remove(auxpass)
+
+        # reinflect main verb and auxiliaries
+        auxpass_infl = auxpass['inflection']
+        agent_infl = self.agent_word['inflection']
+        if auxpass_infl == 'VBP' and agent_infl == 'NN':
+            verb_infl = 'VBZ'
+        elif auxpass_infl in ['VBZ', 'VBN'] and agent_infl == 'NNS':
+            verb_infl = 'VBP'
+        else:
+            verb_infl = auxpass_infl
+        verb_word['form'] = getInflection(verb_word['lemma'], verb_infl)[0]
+        # Also inflect first auxiliary verb
+        for w in verb_const:
+            if w['upos'] in ['VERB', 'AUX']:
+                # print(w['form'], w['lemma'])
+                w['form'] = getInflection(w['lemma'], verb_infl)[0]
+            break
+        # print(auxpass_infl, agent_infl, verb_infl, verb_word['form'])
+        # print(' '.join(w['form'] for w in verb_const))
+        return verb_const
+    
+    def activize_subj(self):
+        # handle pronouns
+        subj_const = [w.deep_copy() for w in self.passive_subject]
+        switch_pronoun(subj_const)
+        return subj_const
+    
+    def activize_agent(self):
+        # remove 'by'
+        agent_const = list(filter(lambda w: w['head'] != self.agent_word['id'] or w['deprel'] != 'case', self.agent))
+        agent_const = [w.deep_copy() for w in agent_const]
+        # handle pronouns
+        switch_pronoun(agent_const)
+        return agent_const
+
     def find_pass_subj(self):
         """
         Extract the passive subject + constituent from this sentence.
@@ -114,7 +206,7 @@ class PassiveSentence(Sentence):
                                 deprel=['aux', 'aux:pass']) # pass aux will be removed later
         
         # remove adverbs that come after the verb
-        verb_subtree = list(filter(lambda w: w['upos'] != 'ADV' or w['id'] < verb['id'], verb_subtree))
+        verb_subtree = Sentence(list(filter(lambda w: w['upos'] != 'ADV' or w['id'] < verb['id'], verb_subtree)))
         return verb_subtree, verb
     
     def find_pass_agent(self):
