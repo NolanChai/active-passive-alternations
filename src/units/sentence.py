@@ -93,7 +93,7 @@ class PassiveSentence(Sentence):
     def __init__(self, tokens: list[dict]) -> None:
         super().__init__(tokens)
         if not self.is_passive:
-            raise ValueError("The provided sentence is not passive.")
+            raise ValueError("The provided sentence is not passive (missing either nsubj:pass or obl:agent).")
         
         # Extract core
         self.passive_subject, self.passive_subject_word = self.find_pass_subj()
@@ -101,7 +101,13 @@ class PassiveSentence(Sentence):
         self.agent, self.agent_word = self.find_pass_agent()
     
     def depassivize(self):
-        """Convert the passive sentence to active voice."""
+        """
+        Convert the passive sentence to active voice. Note that dependencies in
+        the resulting sentence will not be accurate.
+
+        Returns:
+            Sentence: a deep copy of the sentence, converted to active voice. 
+        """
         words = [w.deep_copy() for w in self]
         
         # Get indices for passive components
@@ -127,7 +133,15 @@ class PassiveSentence(Sentence):
         return Sentence(activized_sentence)
         
     def activize_verb(self):
-        """Convert the passive verb to active voice."""
+        """
+        Find the active form of the verb constituent in the sentence.
+
+        Raises:
+            ValueError: if no auxiliary passive verb is found.
+
+        Returns:
+            List: The active form of the verb constituent.
+        """
         # deep copy to not modify original
         verb_const = [w.deep_copy() for w in self.verb]
         verb_word = self.verb_word.deep_copy()
@@ -158,14 +172,29 @@ class PassiveSentence(Sentence):
         return verb_const
     
     def activize_subj(self):
+        """
+        Find the active form of the passive subject constituent in the sentence.
+        Converts pronouns from subject -> object.
+
+        Returns:
+            List: The active form of the subject constituent.
+        """
         # handle pronouns
         subj_const = [w.deep_copy() for w in self.passive_subject]
         switch_pronoun(subj_const)
         return subj_const
     
     def activize_agent(self):
+        """
+        Find the active form of the agent constituent in the sentence.
+        Removes 'by' and converts pronouns from object -> subject.
+
+        Returns:
+            List: The active form of the agent constituent.
+        """
         # remove 'by'
-        agent_const = list(filter(lambda w: w['head'] != self.agent_word['id'] or w['deprel'] != 'case', self.agent))
+        agent_const = list(filter(lambda w: w['head'] != self.agent_word['id'] 
+                                  or w['deprel'] != 'case', self.agent))
         agent_const = [w.deep_copy() for w in agent_const]
         # handle pronouns
         switch_pronoun(agent_const)
