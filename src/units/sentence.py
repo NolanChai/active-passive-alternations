@@ -99,6 +99,12 @@ class PassiveSentence(Sentence):
         self.passive_subject, self.passive_subject_word = self.find_pass_subj()
         self.verb, self.verb_word = self.find_verb()
         self.agent, self.agent_word = self.find_pass_agent()
+        if self.passive_subject is None:
+            raise ValueError("No passive subject found in the sentence.")
+        if self.verb is None:
+            raise ValueError("No verb found in the sentence.")
+        if self.agent is None:
+            raise ValueError("No passive agent found in the sentence.")
     
     def depassivize(self):
         """
@@ -144,7 +150,7 @@ class PassiveSentence(Sentence):
         """
         # deep copy to not modify original
         verb_const = [w.deep_copy() for w in self.verb]
-        verb_word = self.verb_word.deep_copy()
+        verb_word = next(filter(lambda w: w['id'] == self.verb_word['id'], verb_const), None)
         
         auxpass = next(filter(lambda w: w['deprel'] == 'aux:pass', verb_const), None)
         if auxpass is None:
@@ -154,21 +160,57 @@ class PassiveSentence(Sentence):
         # reinflect main verb and auxiliaries
         auxpass_infl = auxpass['inflection']
         agent_infl = self.agent_word['inflection']
-        if auxpass_infl == 'VBP' and agent_infl == 'NN':
-            verb_infl = 'VBZ'
-        elif auxpass_infl in ['VBZ', 'VBN'] and agent_infl == 'NNS':
-            verb_infl = 'VBP'
-        else:
-            verb_infl = auxpass_infl
-        verb_word['form'] = getInflection(verb_word['lemma'], verb_infl)[0]
-        # Also inflect first auxiliary verb
+        
+        # Determine new inflection for main verb
+        verb_word['form'] = getInflection(verb_word['lemma'], auxpass_infl)[0]
+        # Inflect first auxiliary verb/main verb according to agent
+        verb_person_key = {
+            'me': '1',
+            'you': '2'
+        }
+        verb_tense_key = {
+            'VB': 'present',
+            'VBD': 'past',
+            'VBN': 'past',
+            'VBP': 'present',
+            'VBZ': 'present'
+        }
+        verb_infl_key = {
+            '1Spast': 'VBD',
+            '2Spast': 'VBD',
+            '3Spast': 'VBD',
+            '1Ppast': 'VBD',
+            '2Ppast': 'VBD',
+            '3Ppast': 'VBD',
+            '1Spresent': 'VBP',
+            '2Spresent': 'VBP',
+            '3Spresent': 'VBZ',
+            '1Ppresent': 'VBP',
+            '2Ppresent': 'VBP',
+            '3Ppresent': 'VBP',
+        }
         for w in verb_const:
             if w['upos'] in ['VERB', 'AUX']:
-                # print(w['form'], w['lemma'])
-                w['form'] = getInflection(w['lemma'], verb_infl)[0]
-            break
-        # print(auxpass_infl, agent_infl, verb_infl, verb_word['form'])
-        # print(' '.join(w['form'] for w in verb_const))
+                if w['xpos'] == 'MD':
+                    verb_infl = 'MD'
+                    break
+                verb_person = verb_person_key.get(self.agent_word['lemma'].lower(), 3)
+                verb_number = 'S' if agent_infl == 'NN' else 'P'
+                if w['upos'] == 'VERB':
+                    verb_tense = verb_tense_key.get(auxpass['inflection'], 'present')
+                else:
+                    verb_tense = verb_tense_key.get(w['inflection'], 'present')
+                verb_infl = verb_infl_key[f'{verb_person}{verb_number}{verb_tense}']
+                inflection_idx = -1 if verb_person == '2' or verb_number == 'P' else 0
+                w['form'] = getInflection(w['lemma'], verb_infl)[inflection_idx]
+                
+                print("pnt:", f'{verb_person}{verb_number}{verb_tense}')
+                break
+        print("auxp:", auxpass_infl, 
+              "| agent_infl:", agent_infl, 
+              "| verb_infl:", verb_infl, 
+              "| verb:", verb_word['form'])
+        print(self.agent_word['form'], ' '.join(w['form'] for w in verb_const))
         return verb_const
     
     def activize_subj(self):
