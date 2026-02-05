@@ -27,9 +27,7 @@ def switch_pronoun(const):
         if w['deprel'] in ['obl:agent', 'nsubj:pass'] and w['form'].lower() in pron_key:
             w['form'] = pron_key[w['form'].lower()]
 
-def build_subtree(root,
-                  upos: list = None,
-                  deprel: list = None):
+def build_subtree(root, upos: list = None, deprel: list = None):
     """return all words under the root in the dependency tree, subject to filters.
 
     Args:
@@ -46,14 +44,17 @@ def build_subtree(root,
 
     subtree = []
     to_visit = [root]
+    use_filter = upos is not None or deprel is not None
+    upos_set = set(upos or [])
+    deprel_set = set(deprel or [])
 
     while to_visit:
         node = to_visit.pop()
         subtree.append(node)
-        if upos or deprel:
+        if use_filter:
             to_visit += [child for child in node['children']
-                        if child['upos'] in upos
-                        or child['deprel'] in deprel]
+                        if child['upos'] in upos_set
+                        or child['deprel'] in deprel_set]
         else:
             to_visit += node['children']
     subtree = sorted(subtree, key=lambda w: w['id'])
@@ -108,7 +109,10 @@ class Sentence(list[Word]):
             result = PassiveSentence(s_list)
         except ValueError:
             result = Sentence(s_list)
-        result.metadata = {key: value for key, value in self.metadata.items()}
+        if self.metadata is None:
+            result.metadata = None
+        else:
+            result.metadata = {key: value for key, value in self.metadata.items()}
         return result
 
     def __str__(self):
@@ -143,11 +147,20 @@ class PassiveSentence(Sentence):
             Sentence: a deep copy of the sentence, converted to active voice. 
         """
         words = [w.deep_copy() for w in self]
-        
+        id_to_idx = {w['id']: i for i, w in enumerate(words)}
+
+        def span_from_ids(ids):
+            idxs = [id_to_idx[i] for i in ids if i in id_to_idx]
+            return (min(idxs), max(idxs))
+
+        verb_ids = [w['id'] for w in self.verb]
+        subj_ids = [w['id'] for w in self.passive_subject]
+        agent_ids = [w['id'] for w in self.agent]
+
         # Get indices for passive components
-        verb_span = (words.index(self.verb[0].deep_copy()), words.index(self.verb[-1].deep_copy()))
-        subj_span = (words.index(self.passive_subject[0].deep_copy()), words.index(self.passive_subject[-1].deep_copy()))
-        agent_span = (words.index(self.agent[0].deep_copy()), words.index(self.agent[-1].deep_copy()))
+        verb_span = span_from_ids(verb_ids)
+        subj_span = span_from_ids(subj_ids)
+        agent_span = span_from_ids(agent_ids)
 
         # reinflect/adjust words
         verb_const = self.activize_verb()
@@ -165,9 +178,12 @@ class PassiveSentence(Sentence):
         )
         activized_sentence = [w.deep_copy() for w in activized_sentence]
         activized_sentence = Sentence(activized_sentence)
-        activized_sentence.metadata = {key: value for key, value in self.metadata.items()}
+        if self.metadata is None:
+            activized_sentence.metadata = None
+        else:
+            activized_sentence.metadata = {key: value for key, value in self.metadata.items()}
         return activized_sentence
-        
+
     def activize_verb(self):
         """
         Find the active form of the verb constituent in the sentence.
@@ -251,7 +267,6 @@ class PassiveSentence(Sentence):
         Returns:
             List: The active form of the subject constituent.
         """
-        # handle pronouns
         subj_const = [w.deep_copy() for w in self.passive_subject]
         switch_pronoun(subj_const)
         return subj_const
@@ -268,7 +283,6 @@ class PassiveSentence(Sentence):
         agent_const = list(filter(lambda w: w['head'] != self.agent_word['id'] 
                                   or w['deprel'] != 'case', self.agent))
         agent_const = [w.deep_copy() for w in agent_const]
-        # handle pronouns
         switch_pronoun(agent_const)
         return agent_const
 
