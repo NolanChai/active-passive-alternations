@@ -10,10 +10,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # moved from UID.ipynb -- will clean up soon
 
 # UID Pipeline
-# This is a notebook to build and compute UID metrics at multiple context levels:
 # - Sentence-only (no prior context)
 # - Previous sentence(s) (local discourse)
 # - Document-level (full prior discourse)
+# - Windowed context (e.g. +/- n sentences, +/- n tokens)
 
 
 def sent_text(sent):
