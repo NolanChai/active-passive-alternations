@@ -39,10 +39,10 @@ class Document(list[Sentence]):
     
     def convert_all(self):
         """
-        Converts each passive sentence -> active and each active sentence -> 
+        Converts each passive sentence -> active and (TODO) each active sentence -> 
         passive, one at a time. Results in num_passives + num_actives counterfactual documents.
         Returns:
-            list[Document]: List of all counterfactual documents
+            list[tuple(Document, idx)]: List of (Document, idx) pairs, where idx is the index of the converted sentence.
         """
         result = []
         passive_indices = [-1]
@@ -70,8 +70,8 @@ class Document(list[Sentence]):
         return zip(result, passive_indices[1:])
     
     def format_doc(self):
-        """Formats text in the document from sentences, putting a newline at paragraph boundaries.
-
+        """Formats text in the document from sentences, putting a newline at 
+        paragraph boundaries.
         Returns:
             str: formatted text
         """
@@ -88,7 +88,15 @@ class Document(list[Sentence]):
         return str(self.text)
 
     def has_passive(self) -> bool:
+        """
+        Returns:
+            bool: whether or not there is at least one passive sentence in the document.
+        """
         return self.num_passives > 0
 
     def has_active(self) -> bool:
+        """
+        Returns:
+            bool: whether or not there is at least one active sentence in the document.
+        """
         return self.num_actives > 0

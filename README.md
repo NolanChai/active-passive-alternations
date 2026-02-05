@@ -34,3 +34,5 @@ In our implementation, we extend `conllu.Token` to include a list of the childre
 - `Sentence` is a wrapper for `List`, similar to `conllu.TokenList`. Initializing a sentence from a list of `Word` or `Token` objects automatically populates each word's `children` attribute with the child nodes of the word. This uses the `head` attribute of each word to determine the dependencies.
 - `PassiveSentence` is an extension of `Sentence`. It stores only sentences in the passive voice with both a passive patient and passive agent. It includes functionality to depassivize the sentence, returning a deep copy of the sentence converted to active voice. Note that dependency structure is *not* updated.
 - `ActiveSentence` TODO
+
+`document.py` contains the definition of the `Document` object, a wrapper for a list of `Sentence` objects. This contains functionality to convert all passive sentences within each document into active sentences (and vice versa (TODO)) one at a time, via the `convert_all()` method.
