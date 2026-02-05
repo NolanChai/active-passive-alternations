@@ -73,8 +73,16 @@ def load_lm(model_name="distilgpt2"):
     return tokenizer, model, device
 
 
-def build_context(sents, idx, mode, k=None, max_tokens=None):
-    # mode: none, prev, doc
+def build_context(
+    sents,
+    idx,
+    mode,
+    k=None,
+    max_tokens=None,
+    window=None,
+    tokenizer=None,
+):
+    # mode: none, prev, doc, window
     if mode == "none" or idx == 0:
         return ""
 
@@ -85,6 +93,53 @@ def build_context(sents, idx, mode, k=None, max_tokens=None):
 
     if mode == "doc":
         return " ".join(sents[:idx])
+
+    if mode == "window":
+        if window is None:
+            return ""
+        wtype = window.get("type", "sent")
+        side = window.get("side", "left")
+        left = window.get("left", 0)
+        right = window.get("right", 0)
+        size = window.get("size")
+        rng = window.get("range")
+
+        if rng is not None:
+            if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                left, right = rng
+            else:
+                raise ValueError("window['range'] must be a 2-tuple like (left, right)")
+
+        if size is not None:
+            if side == "left":
+                left = size
+                right = 0
+            elif side == "right":
+                left = 0
+                right = size
+            else:
+                left = size
+                right = size
+
+        if wtype == "sent":
+            start = max(0, idx - left)
+            end = min(len(sents), idx + right + 1)
+            parts = sents[start:end]
+            # remove current sentence from context
+            if 0 <= idx - start < len(parts):
+                parts = parts[: idx - start] + parts[idx - start + 1 :]
+            return " ".join(parts)
+
+        if wtype == "token":
+            if tokenizer is None:
+                raise ValueError("tokenizer is required for token window context")
+            left_sents = " ".join(sents[:idx])
+            right_sents = " ".join(sents[idx + 1 :])
+            left_ids = tokenizer.encode(left_sents, add_special_tokens=False)
+            right_ids = tokenizer.encode(right_sents, add_special_tokens=False)
+            left_ids = left_ids[-left:] if left > 0 else []
+            right_ids = right_ids[:right] if right > 0 else []
+            return tokenizer.decode(left_ids + right_ids)
 
     return ""
 
@@ -170,6 +225,13 @@ def run_uid_pipeline(
             {"name": "prev1", "mode": "prev", "k": 1},
             {"name": "prev3", "mode": "prev", "k": 3},
             {"name": "document", "mode": "doc"},
+            
+            # sent[-L,+R] = sentence window with L sentences before, R after
+            # tok[-L,+R]  = token window with L tokens before, R after
+            {"name": "sent[-2,+0]", "mode": "window", "window": {"type": "sent", "side": "left", "size": 2}},
+            {"name": "sent[-2,+2]", "mode": "window", "window": {"type": "sent", "side": "both", "size": 2}},
+            {"name": "tok[-64,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 64}},
+            {"name": "tok[-64,+64]", "mode": "window", "window": {"type": "token", "side": "both", "size": 64}},
         ]
 
     rows = []
@@ -177,7 +239,13 @@ def run_uid_pipeline(
         for i, sent in enumerate(sents):
             for cfg in context_levels:
                 context = build_context(
-                    sents, i, mode=cfg["mode"], k=cfg.get("k"), max_tokens=cfg.get("max_tokens")
+                    sents,
+                    i,
+                    mode=cfg["mode"],
+                    k=cfg.get("k"),
+                    max_tokens=cfg.get("max_tokens"),
+                    window=cfg.get("window"),
+                    tokenizer=tokenizer,
                 )
                 tokens, surprisals = compute_surprisal(
                     sent, context, tokenizer, model, device=device
@@ -194,4 +262,3 @@ def run_uid_pipeline(
 
     uid_df = pd.DataFrame(rows)
     return uid_df
-
