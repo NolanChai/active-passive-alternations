@@ -97,6 +97,23 @@ class Sentence(list[Word]):
                 head_word = id_to_word[head_id]
                 head_word['children'].append(word)
                 
+    def deep_copy(self):
+        """Creates a deep copy of the sentence.
+        
+        Returns:
+            Sentence: Deep copy with same words.
+        """
+        s_list = [w.deep_copy() for w in self]
+        try:
+            result = PassiveSentence(s_list)
+        except ValueError:
+            result = Sentence(s_list)
+        result.metadata = {key: value for key, value in self.metadata.items()}
+        return result
+
+    def __str__(self):
+        return self.text
+                
 class PassiveSentence(Sentence):
     def __init__(self, tokens: list[dict]) -> None:
         super().__init__(tokens)
@@ -106,12 +123,15 @@ class PassiveSentence(Sentence):
         # Extract core
         self.passive_subject, self.passive_subject_word = self.find_pass_subj()
         self.verb, self.verb_word = self.find_verb()
+        self.auxpass = next(filter(lambda w: w['deprel'] == 'aux:pass', self.verb), None)
+        if self.auxpass is None:
+            raise ValueError("No auxiliary passive verb found.")
         self.agent, self.agent_word = self.find_pass_agent()
-        if self.passive_subject is None:
+        if self.passive_subject is None or self.passive_subject_word is None:
             raise ValueError("No passive subject found in the sentence.")
-        if self.verb is None:
+        if self.verb is None or self.verb_word is None:
             raise ValueError("No verb found in the sentence.")
-        if self.agent is None:
+        if self.agent is None or self.agent_word is None:
             raise ValueError("No passive agent found in the sentence.")
     
     def depassivize(self):
@@ -144,7 +164,9 @@ class PassiveSentence(Sentence):
             + words[agent_span[1]+1:]
         )
         activized_sentence = [w.deep_copy() for w in activized_sentence]
-        return Sentence(activized_sentence)
+        activized_sentence = Sentence(activized_sentence)
+        activized_sentence.metadata = {key: value for key, value in self.metadata.items()}
+        return activized_sentence
         
     def activize_verb(self):
         """

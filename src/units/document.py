@@ -21,7 +21,8 @@ class Document(list[Sentence]):
         
         # First sentence only should contain document metadata
         assert self[0].metadata.get("newdoc id", None), "First sentence should contain document metadata"
-        assert all(map(lambda s: "newdoc id" not in s.metadata, self[1:])), "Sentence list should only contain one document"
+        for s in self[1:]:
+            assert "newdoc id" not in s.metadata, "Sentence list should only contain one document"
         
         self.doc_id = self[0].metadata["newdoc id"]
         
@@ -32,14 +33,41 @@ class Document(list[Sentence]):
                 self.metadata[attr_name] = value
         
         self.text = self.format_doc()
+        
+        self.num_passives = sum(map(lambda s: isinstance(s, PassiveSentence), self))
+        self.num_actives = len(self) - self.num_passives # redefine once actives are more defined
     
     def convert_all(self):
         """
-        Converts each passive sentence -> active and each active sentence -> passive.
+        Converts each passive sentence -> active and each active sentence -> 
+        passive, one at a time. Results in num_passives + num_actives counterfactual documents.
         Returns:
             list[Document]: List of all counterfactual documents
         """
-        return
+        result = []
+        passive_indices = [-1]
+        for _ in range(self.num_passives):
+            counterfactual_doc = []
+            # append all sentences up to previously found passive
+            for s in self[:passive_indices[-1] + 1]:
+                counterfactual_doc.append(s.deep_copy())
+            # append until we find a passive; depassivize and append
+            for i, s in enumerate(self[passive_indices[-1] + 1:]):
+                if isinstance(s, PassiveSentence):
+                    counterfactual_doc.append(s.depassivize())
+                    # update index of previous passive
+                    passive_indices.append(passive_indices[-1] + i + 1)
+                    break
+                else:
+                    counterfactual_doc.append(s.deep_copy())
+            # append remaining sentences
+            for s in self[passive_indices[-1] + 1:]:
+                counterfactual_doc.append(s.deep_copy())
+            # print(len(counterfactual_doc))
+            # print(counterfactual_doc[1])
+            # print(counterfactual_doc[1].metadata)
+            result.append(Document(counterfactual_doc))
+        return zip(result, passive_indices[1:])
     
     def format_doc(self):
         """Formats text in the document from sentences, putting a newline at paragraph boundaries.
@@ -58,4 +86,9 @@ class Document(list[Sentence]):
     
     def __str__(self):
         return str(self.text)
-        
+
+    def has_passive(self) -> bool:
+        return self.num_passives > 0
+
+    def has_active(self) -> bool:
+        return self.num_actives > 0
