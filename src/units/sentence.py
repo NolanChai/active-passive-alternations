@@ -66,13 +66,21 @@ class Sentence(list[Word]):
     def __init__(self, tokens: list[dict]) -> None:
         super().__init__([Word(token_dict=t) for t in tokens
                           if t['lemma'] != '_'])
+        
+        try:
+            self.metadata = tokens.metadata
+        except AttributeError:
+            self.metadata = None
+        
         self.root = next((word for word in self if word['head'] == 0), None)
+        
         if isinstance(tokens, TokenList):
             self.text = tokens.metadata['text']
         elif isinstance(tokens, Sentence):
             self.text = tokens.text
         else:
             self.text = ' '.join([word['form'] for word in self])
+            
         self.is_passive = (any(word['deprel'] == 'obl:agent' for word in self) 
                            and any(word['deprel'] == 'nsubj:pass' for word in self))
         
@@ -204,7 +212,7 @@ class PassiveSentence(Sentence):
                 inflection_idx = -1 if verb_person == '2' or verb_number == 'P' else 0
                 w['form'] = getInflection(w['lemma'], verb_infl)[inflection_idx]
                 
-                print("pnt:", f'{verb_person}{verb_number}{verb_tense}')
+                # print("pnt:", f'{verb_person}{verb_number}{verb_tense}')
                 break
         print("auxp:", auxpass_infl, 
               "| agent_infl:", agent_infl, 
