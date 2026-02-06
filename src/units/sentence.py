@@ -147,6 +147,13 @@ class PassiveSentence(Sentence):
             Sentence: a deep copy of the sentence, converted to active voice. 
         """
         words = [w.deep_copy() for w in self]
+        drop_by_ids = set()
+        for w in self:
+            if w['deprel'] == 'case' and w['form'].lower() == 'by':
+                head = next((t for t in self if t['id'] == w['head']), None)
+                if head and head['deprel'] == 'advcl' and head['head'] == self.verb_word['id']:
+                    if any(c['deprel'] == 'mark' and c['form'].lower() == 'than' for c in head['children']):
+                        drop_by_ids.add(w['id'])
         id_to_idx = {w['id']: i for i, w in enumerate(words)}
 
         def span_from_ids(ids):
@@ -166,6 +173,8 @@ class PassiveSentence(Sentence):
         verb_const = self.activize_verb()
         subj_const = self.activize_subj()
         agent_const = self.activize_agent()
+        prefix_ids = set(w['id'] for w in words[0:subj_span[0]])
+        verb_const = [w for w in verb_const if w['id'] not in prefix_ids]
 
         # Reorder sentence
         # account for relative clauses
@@ -187,6 +196,8 @@ class PassiveSentence(Sentence):
                 + words[verb_span[1]+1:agent_span[0]]
                 + words[agent_span[1]+1:]
             )
+        if drop_by_ids:
+            activized_sentence = [w for w in activized_sentence if w['id'] not in drop_by_ids]
         activized_sentence = [w.deep_copy() for w in activized_sentence]
         activized_sentence = Sentence(activized_sentence)
         if self.metadata is None:
@@ -290,9 +301,19 @@ class PassiveSentence(Sentence):
         Returns:
             List: The active form of the agent constituent.
         """
-        # remove 'by'
-        agent_const = list(filter(lambda w: w['head'] != self.agent_word['id'] 
-                                  or w['deprel'] != 'case', self.agent))
+        # remove 'by' (including coordinated agent heads)
+        agent_heads = {self.agent_word['id']}
+        added = True
+        while added:
+            added = False
+            for w in self.agent:
+                if w['deprel'] == 'conj' and w['head'] in agent_heads and w['id'] not in agent_heads:
+                    agent_heads.add(w['id'])
+                    added = True
+        agent_const = list(filter(lambda w: not (
+                                  w['deprel'] == 'case'
+                                  and w['form'].lower() == 'by'
+                                  and w['head'] in agent_heads), self.agent))
         agent_const = [w.deep_copy() for w in agent_const]
         switch_pronoun(agent_const)
         return agent_const
