@@ -6,10 +6,13 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "conllu>=6.0.0",
+    "deplacy>=2.1.0",
     "ipykernel>=7.1.0",
+    "numpy>=2.0.0",
     "pandas>=3.0.0",
     "pyinflect>=0.5.1",
     "stanza>=1.11.0",
+    "torch>=2.0.0",
     "transformers>=5.0.0",
     "units>=0.7",
 ]
