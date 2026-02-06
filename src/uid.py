@@ -4,8 +4,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from conllu import parse_incr
+from conllu import parse, parse_incr
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from .units import Document, Sentence, Word
 
 # moved from UID.ipynb -- will clean up soon
 
@@ -50,6 +51,50 @@ def iter_ud_docs(path, limit_docs=None, limit_sents_per_doc=None):
             docs.append((current_id or "doc", current))
 
     return docs
+
+def extend_doc_list(docs, current, current_id):
+    curr_doc = Document(current)
+    converted_docs = list(curr_doc.convert_all())
+    curr_doc_text = [s.text for s in curr_doc]
+    docs.append((f'f::{current_id}::-1', curr_doc_text))
+    
+    if len(converted_docs) > 0:
+        counterf_docs, pass_idxs = zip(*converted_docs)
+        counterf_ids = (f'cf::{current_id}::{pass_idx}' for pass_idx in pass_idxs)
+        counterf_doc_texts = [[s.text for s in counterf_doc] 
+                            for counterf_doc in counterf_docs]
+        counterf_doc_tuples = zip(counterf_ids, counterf_doc_texts)
+        docs.extend(counterf_doc_tuples)
+
+def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
+    docs = []
+    current_id = None
+    current = []
+
+    with open(path, "r", encoding="utf-8") as f:
+        for sent in parse_incr(f):
+            meta = sent.metadata
+            if "newdoc id" in meta:
+                if current_id is not None and current:
+                    extend_doc_list(docs, current, current_id)
+                    if limit_docs and len(docs) >= limit_docs:
+                        return docs
+                current_id = meta["newdoc id"]
+                current = []
+
+            current.append(sent)
+            if limit_sents_per_doc and len(current) >= limit_sents_per_doc:
+                current[0].metadata.update({"newdoc id": current_id})
+                extend_doc_list(docs, current, current_id)
+                if limit_docs and len(docs) >= limit_docs:
+                    return docs
+                current = []
+
+        if current:
+            extend_doc_list(docs, current, current_id)
+
+    return docs
+    
 
 
 def load_lm(model_name="distilgpt2"):
@@ -215,8 +260,12 @@ def run_uid_pipeline(
     limit_docs=3,
     limit_sents_per_doc=8,
     context_levels=None,
+    generate_counterfactual=False
 ):
-    docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
+    if generate_counterfactual:
+        docs = iter_counterfactual_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
+    else:
+        docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
     tokenizer, model, device = load_lm(model_name=model_name)
 
     if context_levels is None:
