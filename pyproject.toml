@@ -7,8 +7,10 @@ requires-python = ">=3.13"
 dependencies = [
     "conllu>=6.0.0",
     "ipykernel>=7.1.0",
+    "matplotlib>=3.10.8",
     "pandas>=3.0.0",
     "pyinflect>=0.5.1",
+    "seaborn>=0.13.2",
     "stanza>=1.11.0",
     "transformers>=5.0.0",
     "units>=0.7",
