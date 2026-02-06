@@ -225,7 +225,7 @@ class PassiveSentence(Sentence):
             raise ValueError("No auxiliary passive verb found.")
         verb_const.remove(auxpass)
 
-        # 2/6/2026 - detect clausal negation tied to verb or its auxiliaries
+        # detect clausal negation tied to verb or its auxiliaries
         aux_ids = {w['id'] for w in self.verb if w['deprel'] in ['aux', 'aux:pass']}
         neg_tokens = []
         for w in self:
@@ -247,7 +247,7 @@ class PassiveSentence(Sentence):
         
         # Determine new inflection for main verb
         verb_word['form'] = getInflection(verb_word['lemma'], auxpass_infl)[0]
-        # 2/6/2026 - add do-support for clausal negation when no other auxiliary is present
+        # add do-support for clausal negation when no other auxiliary is present
         if neg_tokens and not has_focus_neg:
             has_other_aux = any(w['upos'] == 'AUX' or w['xpos'] == 'MD' for w in verb_const)
             if not has_other_aux:
@@ -265,7 +265,7 @@ class PassiveSentence(Sentence):
                 verb_word['form'] = base_form[0] if base_form else verb_word['lemma']
                 verb_const.append(auxpass)
 
-        # 2/6/2026 - sort verb_const by ID so do-support is inflected instead of main verb
+        # sort verb_const by ID so do-support is inflected instead of main verb
         verb_const = sorted(verb_const, key=lambda w: w['id'])
 
         # Inflect first auxiliary verb/main verb according to agent
