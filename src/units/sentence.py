@@ -68,10 +68,10 @@ def detokenize(words):
         return ""
     # a bit of a naive handling of the spaces and no spaces... lol...
     no_space_before = {
-        ",", ".", ":", ";", "!", "?", "%", ")", "]", "}", "”", "»", "…",
+        ",", ".", ":", ";", "!", "?", "%", ")", "]", "}", "”", "’", "»", "…",
         "-", "—"
     }
-    no_space_after = {"(", "[", "{", "“", "«", "``", "$", "£", "€", "-", "—"}
+    no_space_after = {"(", "[", "{", "“", "‘", "«", "``", "$", "£", "€", "-", "—"}
 
     def has_no_space_after(word):
         misc = word.get('misc') or {}
@@ -233,7 +233,28 @@ class PassiveSentence(Sentence):
 
         verb_ids = [w['id'] for w in self.verb]
         subj_ids = [w['id'] for w in self.passive_subject]
-        agent_ids = [w['id'] for w in self.agent]
+        # remove stray quote punctuation from agent span so it stays with the quoted phrase
+        quote_forms = {"'", "’", "‘", '"', "“", "”", "``", "''"}
+        agent_heads = {self.agent_word['id']}
+        added = True
+        while added:
+            added = False
+            for w in self.agent:
+                if w['deprel'] == 'conj' and w['head'] in agent_heads and w['id'] not in agent_heads:
+                    agent_heads.add(w['id'])
+                    added = True
+        core_ids = {w['id'] for w in self.agent if not (
+            w['deprel'] == 'case'
+            and w['form'].lower() == 'by'
+            and w['head'] in agent_heads
+        )}
+        stray_quote_ids = {w['id'] for w in self.agent if (
+            w['upos'] == 'PUNCT'
+            and w['form'] in quote_forms
+            and (w['id'] - 1) not in core_ids
+            and (w['id'] + 1) not in core_ids
+        )}
+        agent_ids = [w['id'] for w in self.agent if w['id'] not in stray_quote_ids]
 
         # Get indices for passive components
         verb_span = span_from_ids(verb_ids)
