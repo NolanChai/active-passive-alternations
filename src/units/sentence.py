@@ -168,14 +168,25 @@ class PassiveSentence(Sentence):
         agent_const = self.activize_agent()
 
         # Reorder sentence
-        activized_sentence = (words[0:subj_span[0]]
-            + agent_const
-            + words[subj_span[1]+1:verb_span[0]]
-            + verb_const
-            + subj_const
-            + words[verb_span[1]+1:agent_span[0]]
-            + words[agent_span[1]+1:]
-        )
+        # account for relative clauses
+        if self.passive_subject_word['feats'].get('PronType', None) == 'Rel':
+            activized_sentence = (words[0:subj_span[0]]
+                + subj_const
+                + agent_const
+                + words[subj_span[1]+1:verb_span[0]]
+                + verb_const
+                + words[verb_span[1]+1:agent_span[0]]
+                + words[agent_span[1]+1:]
+            )
+        else:
+            activized_sentence = (words[0:subj_span[0]]
+                + agent_const
+                + words[subj_span[1]+1:verb_span[0]]
+                + verb_const
+                + subj_const
+                + words[verb_span[1]+1:agent_span[0]]
+                + words[agent_span[1]+1:]
+            )
         activized_sentence = [w.deep_copy() for w in activized_sentence]
         activized_sentence = Sentence(activized_sentence)
         if self.metadata is None:
