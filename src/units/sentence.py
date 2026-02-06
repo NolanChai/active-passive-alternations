@@ -438,6 +438,15 @@ class PassiveSentence(Sentence):
                                   w['deprel'] == 'case'
                                   and w['form'].lower() == 'by'
                                   and w['head'] in agent_heads), self.agent))
+        # drop stray quote punctuation that isn't adjacent to the agent phrase
+        quote_forms = {"'", "’", "‘", '"', "“", "”", "``", "''"}
+        agent_ids = {w['id'] for w in agent_const}
+        agent_const = [w for w in agent_const if not (
+            w['upos'] == 'PUNCT'
+            and w['form'] in quote_forms
+            and (w['id'] - 1) not in agent_ids
+            and (w['id'] + 1) not in agent_ids
+        )]
         agent_const = [w.deep_copy() for w in agent_const]
         switch_pronoun(agent_const)
         return agent_const
