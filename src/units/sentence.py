@@ -510,7 +510,7 @@ class PassiveSentence(Sentence):
             return None, None
         verb_subtree = build_subtree(verb,
                                 upos=['ADV'],
-                                deprel=['aux', 'aux:pass']) # pass aux will be removed later
+                                deprel=['aux', 'aux:pass', 'cc']) # pass aux will be removed later
         
         # remove adverbs that come after the verb
         verb_subtree = Sentence(list(filter(lambda w: w['upos'] != 'ADV' or w['id'] < verb['id'], verb_subtree)))
