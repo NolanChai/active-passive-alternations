@@ -199,14 +199,16 @@ class PassiveSentence(Sentence):
         if drop_by_ids:
             activized_sentence = [w for w in activized_sentence if w['id'] not in drop_by_ids]
         activized_sentence = [w.deep_copy() for w in activized_sentence]
+        activized_sentence[0]['form'] = activized_sentence[0]['form'].title()
         activized_sentence = Sentence(activized_sentence)
         if self.metadata is None:
             activized_sentence.metadata = None
         else:
             activized_sentence.metadata = {key: value for key, value in self.metadata.items()}
+            activized_sentence.metadata['text'] = activized_sentence.text
         return activized_sentence
 
-    def activize_verb(self):
+    def activize_verb(self, verbose=False):
         """
         Find the active form of the verb constituent in the sentence.
 
@@ -320,11 +322,12 @@ class PassiveSentence(Sentence):
                 
                 # print("pnt:", f'{verb_person}{verb_number}{verb_tense}')
                 break
-        print("auxp:", auxpass_infl, 
-              "| agent_infl:", agent_infl, 
-              "| verb_infl:", verb_infl, 
-              "| verb:", verb_word['form'])
-        print(self.agent_word['form'], ' '.join(w['form'] for w in verb_const))
+        if verbose:
+            print("auxp:", auxpass_infl, 
+                "| agent_infl:", agent_infl, 
+                "| verb_infl:", verb_infl, 
+                "| verb:", verb_word['form'])
+            print(self.agent_word['form'], ' '.join(w['form'] for w in verb_const))
         return verb_const
     
     def activize_subj(self):
@@ -337,6 +340,10 @@ class PassiveSentence(Sentence):
         """
         subj_const = [w.deep_copy() for w in self.passive_subject]
         switch_pronoun(subj_const)
+        
+        # Turn form to lowercase if not proper noun
+        if subj_const[0]['upos'] != 'PROPN':
+            subj_const[0]['form'] = subj_const[0]['form'].lower()
         return subj_const
     
     def activize_agent(self):
