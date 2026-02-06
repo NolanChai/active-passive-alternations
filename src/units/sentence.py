@@ -72,20 +72,26 @@ def detokenize(words):
         "-", "—"
     }
     no_space_after = {"(", "[", "{", "“", "‘", "«", "``", "$", "£", "€", "-", "—"}
+    closing_punct = {")", "]", "}", "”", "’", "»", '"', "''"}
 
-    def has_no_space_after(word):
+    def wordlike(form):
+        return form.isalnum()
+
+    def has_no_space_after(word, next_word=None):
         misc = word.get('misc') or {}
         if misc.get('SpaceAfter') != 'No':
             return False
-        return word.get('upos') in ['PUNCT', 'SYM']
+        if word.get('upos') not in ['PUNCT', 'SYM']:
+            return False
+        if (next_word and word.get('form') in closing_punct and wordlike(next_word['form'])
+                and word.get('xpos') != '``'):
+            return False
+        return True
 
     def is_clitic(form):
         if form in ["n't"]:
             return True
         return form.startswith("'") and len(form) > 1
-
-    def wordlike(form):
-        return form.isalnum()
 
     def is_possessive(word):
         return word.get('upos') == 'PART' and word.get('xpos') == 'POS'
@@ -109,7 +115,7 @@ def detokenize(words):
         cur = words[i]
         nxt = words[i + 1] if i + 1 < len(words) else None
         cur_form = cur['form']
-        if (has_no_space_after(prev)
+        if (has_no_space_after(prev, cur)
                 or cur_form in no_space_before
                 or is_clitic(cur_form)
                 or is_possessive(cur)
