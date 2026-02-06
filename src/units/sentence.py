@@ -60,6 +60,66 @@ def build_subtree(root, upos: list = None, deprel: list = None):
     subtree = sorted(subtree, key=lambda w: w['id'])
     return Sentence(subtree)
 
+def detokenize(words):
+    """
+    Heuristic detokenizer with UD SpaceAfter=No support.
+    """
+    if not words:
+        return ""
+    # a bit of a naive handling of the spaces and no spaces... lol...
+    no_space_before = {
+        ",", ".", ":", ";", "!", "?", "%", ")", "]", "}", "”", "»", "…",
+        "-", "—"
+    }
+    no_space_after = {"(", "[", "{", "“", "«", "``", "$", "£", "€", "-", "—"}
+
+    def has_no_space_after(word):
+        misc = word.get('misc') or {}
+        if misc.get('SpaceAfter') != 'No':
+            return False
+        return word.get('upos') in ['PUNCT', 'SYM']
+
+    def is_clitic(form):
+        if form in ["n't"]:
+            return True
+        return form.startswith("'") and len(form) > 1
+
+    def wordlike(form):
+        return form.isalnum()
+
+    def is_possessive(word):
+        return word.get('upos') == 'PART' and word.get('xpos') == 'POS'
+
+    def is_quote_attach(prev, cur, nxt):
+        cur_form = cur['form']
+        if cur.get('upos') != 'PUNCT':
+            return False
+        if cur_form not in ['"', "''", "”", "'"]:
+            return False
+        # attach closing quotes to previous word; opening quotes usually have xpos=`` 
+        if cur.get('xpos') == '``':
+            return False
+        if prev and wordlike(prev['form']):
+            return True
+        return False
+
+    parts = [words[0]['form']]
+    for i in range(1, len(words)):
+        prev = words[i - 1]
+        cur = words[i]
+        nxt = words[i + 1] if i + 1 < len(words) else None
+        cur_form = cur['form']
+        if (has_no_space_after(prev)
+                or cur_form in no_space_before
+                or is_clitic(cur_form)
+                or is_possessive(cur)
+                or is_quote_attach(prev, cur, nxt)
+                or prev['form'] in no_space_after):
+            parts.append(cur_form)
+        else:
+            parts.append(" " + cur_form)
+    return "".join(parts)
+
 class Sentence(list[Word]):
     """
     Wrapper class for a list of Word objects to represent a sentence.
@@ -80,7 +140,7 @@ class Sentence(list[Word]):
         elif isinstance(tokens, Sentence):
             self.text = tokens.text
         else:
-            self.text = ' '.join([word['form'] for word in self])
+            self.text = detokenize(self)
             
         self.is_passive = (any(word['deprel'] == 'obl:agent' for word in self) 
                            and any(word['deprel'] == 'nsubj:pass' for word in self))
@@ -146,6 +206,17 @@ class PassiveSentence(Sentence):
         Returns:
             Sentence: a deep copy of the sentence, converted to active voice. 
         """
+        # keep original for relative "who" passives (avoids awkward object relatives)
+        subj_feats = self.passive_subject_word.get('feats') or {}
+        if subj_feats.get('PronType', None) == 'Rel' and self.passive_subject_word['lemma'] == 'who':
+            original = Sentence([w.deep_copy() for w in self])
+            if self.metadata is None:
+                original.metadata = None
+            else:
+                original.metadata = {key: value for key, value in self.metadata.items()}
+                original.metadata['text'] = original.text
+            return original
+
         words = [w.deep_copy() for w in self]
         drop_by_ids = set()
         for w in self:
