@@ -225,12 +225,49 @@ class PassiveSentence(Sentence):
             raise ValueError("No auxiliary passive verb found.")
         verb_const.remove(auxpass)
 
+        # 2/6/2026 - detect clausal negation tied to verb or its auxiliaries
+        aux_ids = {w['id'] for w in self.verb if w['deprel'] in ['aux', 'aux:pass']}
+        neg_tokens = []
+        for w in self:
+            feats = w.get('feats') or {}
+            if (w['lemma'] == 'not' or w['form'].lower() in ["not", "n't"]) and feats.get('Polarity', None) == 'Neg':
+                if w['head'] == self.verb_word['id'] or w['head'] in aux_ids:
+                    neg_tokens.append(w)
+        has_focus_neg = any(any(o['lemma'] == 'only' and (o['head'] == n['head'] or o['head'] == n['id']) for o in self)
+                            for n in neg_tokens)
+        if neg_tokens:
+            verb_ids = set(w['id'] for w in verb_const)
+            for n in neg_tokens:
+                if n['id'] not in verb_ids:
+                    verb_const.append(n.deep_copy())
+
         # reinflect main verb and auxiliaries
         auxpass_infl = auxpass['inflection']
         agent_infl = self.agent_word['inflection']
         
         # Determine new inflection for main verb
         verb_word['form'] = getInflection(verb_word['lemma'], auxpass_infl)[0]
+        # 2/6/2026 - add do-support for clausal negation when no other auxiliary is present
+        if neg_tokens and not has_focus_neg:
+            has_other_aux = any(w['upos'] == 'AUX' or w['xpos'] == 'MD' for w in verb_const)
+            if not has_other_aux:
+                auxpass['lemma'] = 'do'
+                auxpass['upos'] = 'AUX'
+                auxpass['deprel'] = 'aux'
+                auxpass['xpos'] = auxpass_infl
+                auxpass['inflection'] = auxpass_infl
+                do_form = getInflection('do', auxpass_infl)
+                if do_form:
+                    auxpass['form'] = do_form[0]
+                else:
+                    auxpass['form'] = 'do'
+                base_form = getInflection(verb_word['lemma'], 'VB')
+                verb_word['form'] = base_form[0] if base_form else verb_word['lemma']
+                verb_const.append(auxpass)
+
+        # 2/6/2026 - sort verb_const by ID so do-support is inflected instead of main verb
+        verb_const = sorted(verb_const, key=lambda w: w['id'])
+
         # Inflect first auxiliary verb/main verb according to agent
         verb_person_key = {
             'me': '1',
@@ -270,7 +307,16 @@ class PassiveSentence(Sentence):
                     verb_tense = verb_tense_key.get(w['inflection'], 'present')
                 verb_infl = verb_infl_key[f'{verb_person}{verb_number}{verb_tense}']
                 inflection_idx = -1 if verb_person == '2' or verb_number == 'P' else 0
-                w['form'] = getInflection(w['lemma'], verb_infl)[inflection_idx]
+                # 2/6/2026 - avoid archaic do-support forms like "didst"/"dost"
+                if w['lemma'] == 'do':
+                    if verb_infl == 'VBD':
+                        w['form'] = 'did'
+                    elif verb_infl == 'VBZ':
+                        w['form'] = 'does'
+                    else:
+                        w['form'] = 'do'
+                else:
+                    w['form'] = getInflection(w['lemma'], verb_infl)[inflection_idx]
                 
                 # print("pnt:", f'{verb_person}{verb_number}{verb_tense}')
                 break
