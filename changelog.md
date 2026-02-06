@@ -6,3 +6,6 @@ General use-case changelog to track commits and changes
   * Changed `detokenize()` to add `'` and `‘` to avoid the dog spacing issue
   * Referring to this case: 
   > Thus, the sound of the word dog in English is connected to the concept ‘dog’ by historical accident and not by any natural connection; roughly the same concept is just as well denoted in French by chien, in German by hund, and in Japanese by inu.
+
+  Now correctly results in:
+  > Thus, historical accident and not any natural connection connects the sound of the word dog in English to the concept ‘dog’; roughly the same concept is just as well denoted in French by chien, denoted in German by hund, and denoted in Japanese by inu.
