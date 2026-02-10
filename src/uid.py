@@ -7,6 +7,8 @@ import torch
 from conllu import parse, parse_incr
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from .units import Document, Sentence, Word
+from tqdm import tqdm
+from utils import *
 
 # moved from UID.ipynb -- will clean up soon
 
@@ -190,7 +192,13 @@ def build_context(
 
 
 # token level surprisal for the current sentence only
-def compute_surprisal(sentence, context, tokenizer, model, max_len=None, device=None):
+def compute_surprisal(sentence, 
+                      context, 
+                      tokenizer, 
+                      model, 
+                      max_len=None, 
+                      device=None,
+                      batch_size=32,):
     context_ids = tokenizer.encode(context, add_special_tokens=False)
     sent_ids = tokenizer.encode(sentence, add_special_tokens=False)
 
@@ -212,9 +220,12 @@ def compute_surprisal(sentence, context, tokenizer, model, max_len=None, device=
 
     input_ids = torch.tensor([context_ids + sent_ids], device=device)
 
-    with torch.no_grad():
-        logits = model(input_ids).logits
-        log_probs = torch.log_softmax(logits, dim=-1)
+    batches = get_batches(input_ids, batch_size, device=device)
+    log_probs = []
+    for batch in batches:
+        with torch.no_grad():
+            logits = model(input_ids).logits
+            log_probs.extend(torch.log_softmax(logits, dim=-1).detach().cpu().to_list())
 
     start = len(context_ids)
     surprisals = []
