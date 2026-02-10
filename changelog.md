@@ -1,5 +1,10 @@
 # Changelog
 General use-case changelog to track commits and changes
+### 2/9/2026
+#### UID Calculation Script
+* Started writing a script (`run_uid_pipeline`) to process conllu files and calculate UID. Script writes out a .csv file with all uid metrics for each sentence in each document. I also added progress bars to help visualize processing time.
+* Started doing some more formal analysis (graphing + statistical tests) in the UID_analysis notebook.
+
 ### 2/6/2026 Fixes
 #### Quotes fix
 * There was an issue where closing quotes and parentheses would sometimes be attached to the agent head as `punct`, so it gets pulled into the agent subtree and moves to the front when you swap constituents. Specifically:
