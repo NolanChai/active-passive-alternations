@@ -31,5 +31,5 @@ def get_batches(items, batch_size, device="cpu"):
     for i in range(num_batches):
         start_idx = i * batch_size
         batch = items[start_idx:start_idx + batch_size]
-        batched.append(torch.tensor(batch, device=device))
+        batched.append(batch)
     return batched

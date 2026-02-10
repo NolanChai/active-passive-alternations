@@ -8,7 +8,7 @@ from conllu import parse, parse_incr
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from .units import Document, Sentence, Word
 from tqdm import tqdm
-from utils import *
+from .utils import *
 
 # moved from UID.ipynb -- will clean up soon
 
@@ -197,8 +197,7 @@ def compute_surprisal(sentence,
                       tokenizer, 
                       model, 
                       max_len=None, 
-                      device=None,
-                      batch_size=32,):
+                      device=None):
     context_ids = tokenizer.encode(context, add_special_tokens=False)
     sent_ids = tokenizer.encode(sentence, add_special_tokens=False)
 
@@ -220,12 +219,9 @@ def compute_surprisal(sentence,
 
     input_ids = torch.tensor([context_ids + sent_ids], device=device)
 
-    batches = get_batches(input_ids, batch_size, device=device)
-    log_probs = []
-    for batch in batches:
-        with torch.no_grad():
-            logits = model(input_ids).logits
-            log_probs.extend(torch.log_softmax(logits, dim=-1).detach().cpu().to_list())
+    with torch.no_grad():
+        logits = model(input_ids).logits
+        log_probs = torch.log_softmax(logits, dim=-1)
 
     start = len(context_ids)
     surprisals = []
@@ -295,7 +291,15 @@ def run_uid_pipeline(
         ]
 
     rows = []
+    
     for doc_id, sents in docs:
+        sents_pbar = tqdm(
+            total=len(sents),
+            desc=f"Processing {doc_id}",
+            unit="sentences",
+            position=0,
+            leave=True
+        )
         for i, sent in enumerate(sents):
             for cfg in context_levels:
                 context = build_context(
@@ -319,6 +323,7 @@ def run_uid_pipeline(
                 }
                 row.update(metrics)
                 rows.append(row)
-
+            sents_pbar.update(1)
+        sents_pbar.close()
     uid_df = pd.DataFrame(rows)
     return uid_df
