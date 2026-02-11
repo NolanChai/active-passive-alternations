@@ -6,9 +6,9 @@ import pandas as pd
 import torch
 from conllu import parse, parse_incr
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from .units import Document, Sentence, Word
+from units import Document, Sentence, Word
 from tqdm import tqdm
-from .utils import *
+from utils import *
 
 # moved from UID.ipynb -- will clean up soon
 
@@ -193,14 +193,19 @@ def build_context(
 
 # token level surprisal for the current sentence only
 def compute_surprisal(sentence, 
-                      context, 
+                      context,
+                      document, 
                       tokenizer, 
                       model, 
                       max_len=None, 
-                      device=None):
+                      device=None,
+                      uid_level="sentence"):
     context_ids = tokenizer.encode(context, add_special_tokens=False)
     sent_ids = tokenizer.encode(sentence, add_special_tokens=False)
-
+    if uid_level not in ["sentence"]:
+        document_ids = tokenizer.encode(document, add_special_tokens=False)
+    else:
+        document_ids = None
     # Add BOS to allow a probability for the first token
     context_ids = [tokenizer.bos_token_id] + context_ids
 
@@ -217,28 +222,56 @@ def compute_surprisal(sentence,
     if device is None:
         device = model.device
 
-    input_ids = torch.tensor([context_ids + sent_ids], device=device)
+    input_ids, start, end = get_input_start_end(sent_ids, context_ids, document_ids, uid_level)
+    input_ids.to(device)
 
     with torch.no_grad():
         logits = model(input_ids).logits
         log_probs = torch.log_softmax(logits, dim=-1)
-
-    start = len(context_ids)
+    
     surprisals = []
     tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
 
-    for i in range(start, input_ids.size(1)):
+    for i in range(start, end):
         token_id = input_ids[0, i]
         lp = log_probs[0, i - 1, token_id]
         surprisal = (-lp / math.log(2)).item()
         surprisals.append(surprisal)
 
-    sent_tokens = tokens[start:]
+    sent_tokens = tokens[start:end]
     return sent_tokens, surprisals
 
-
+def get_input_start_end(sent_ids, 
+                        context_ids, 
+                        doc_ids, 
+                        uid_level):
+    # TODO: change to be variable
+    # if uid_level = "sentence":
+    #   input_ids = context_ids + sent_ids
+    #   start = len(context_ids)
+    #   end = input_ids.size(1)
+    #   * default behavior
+    # if uid_level = "document":
+    #   input_ids = all ids in document
+    #   start = 0
+    #   end = input_ids.size(1)
+    #   * Would be expensive to compute for every sentence; add option to compute only for passives/actives?
+    # if uid_level = "(-a, +b)":
+    #   input_ids = context_ids (if context extends beyond a) + a units before sentence + sent_ids + b units after sentence
+    #   start = max(0, len(context_ids) - len(a))
+    #   end = input_ids.size(1)
+    #   * This would depend on unit as well, ex. a tokens or words or sentences before
+    #   * Alternate strategy: Always follow this structure, take in a variable a and b
+    #   * This one perfectly describes others: set a = nothing/entire document before, and b = nothing/entire document after
+    if uid_level == "sentence":
+        input_ids = torch.tensor([context_ids + sent_ids])
+        start = len(context_ids)
+        end = input_ids.size(1)
+    return input_ids, start, end
+    
 # Really basic UID metrics
-def uid_metrics(surprisals):
+def uid_metrics(surprisals, 
+                uid_unit="token"):
     if not surprisals:
         return {}
     arr = np.array(surprisals)
@@ -300,6 +333,7 @@ def run_uid_pipeline(
             position=0,
             leave=True
         )
+        document = ' '.join(sents)
         for i, sent in enumerate(sents):
             for cfg in context_levels:
                 context = build_context(
@@ -312,7 +346,8 @@ def run_uid_pipeline(
                     tokenizer=tokenizer,
                 )
                 tokens, surprisals = compute_surprisal(
-                    sent, context, tokenizer, model, device=device
+                    sent, context, document,
+                    tokenizer=tokenizer, model=model, device=device
                 )
                 metrics = uid_metrics(surprisals)
                 row = {

@@ -2,7 +2,7 @@ import conllu
 import deplacy
 from pyinflect import getAllInflections, getInflection
 from conllu import TokenList
-from .units.sentence import Sentence
+from units.sentence import Sentence
 import numpy as np
 import torch
 
