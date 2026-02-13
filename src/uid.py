@@ -226,8 +226,8 @@ def compute_surprisal(sentence,
     if device is None:
         device = model.device
 
-    input_ids, start, end = get_input_start_end(sent_ids, context_ids, 
-                                                document_ids, uid_level, sent_idx)
+    input_ids, start, end = get_input_start_end(sent_ids, context_ids, document_ids,
+                                                uid_level, sent_idx)
     input_ids.to(device)
 
     with torch.no_grad():
@@ -246,9 +246,9 @@ def compute_surprisal(sentence,
     sent_tokens = tokens[start:end]
     return sent_tokens, surprisals
 
-def get_input_start_end(sent_ids, 
-                        context_ids, 
-                        doc_ids, 
+def get_input_start_end(sent_ids,
+                        context_ids,
+                        doc_ids,
                         uid_level,
                         sent_idx):
     if uid_level == "sentence":
@@ -281,6 +281,7 @@ def uid_metrics(surprisals,
     mean = arr.mean()
     std = arr.std()
     mad = np.mean(np.abs(arr - mean))
+    pwd = (np.diff(arr) ** 2).mean()
     rng = arr.max() - arr.min()
 
     x = np.arange(len(arr))
@@ -290,6 +291,7 @@ def uid_metrics(surprisals,
         "uid_mean": mean,
         "uid_std": std,
         "uid_mad": mad,
+        "uid_pwd": pwd,
         "uid_range": rng,
         "uid_cv": std / mean if mean > 0 else 0.0,
         "uid_slope": slope,
