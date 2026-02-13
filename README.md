@@ -2,17 +2,17 @@
 
 ## Setup
 
-Initialize by using
+Initialize the environment by using
 ```
 uv sync
 ```
 to install and sync all packages.
 
-You can launch Jupyter Notebook in a uv containerized environment with
+You can launch JupyterLab in our uv containerized environment with
 ```
 uv run --with jupyter jupyter lab
 ```
-
+to test and/or take a closer look at our codebase.
 ## Code Structure
 
 Utility for converting between active and passive sentences is found in the `src` folder. A demo can be found in `passive_active_switch.ipynb`.
