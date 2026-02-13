@@ -548,3 +548,323 @@ class PassiveSentence(Sentence):
 
         # ids -> words
         return agent_subtree, agent
+
+class ActiveSentence(Sentence):
+    def __init__(self, tokens: list[dict]) -> None:
+        super().__init__(tokens)
+        if self.is_passive:
+            raise ValueError("The provided sentence is passive.")
+        self.active_subject, self.active_subject_word = self.find_act_subj()
+        self.active_object, self.active_object_word = self.find_act_obj()
+        if self.active_subject is None or self.active_subject_word is None:
+            raise ValueError("No active subject found in the sentence.")
+        if self.active_object is None or self.active_object_word is None:
+            raise ValueError("No active object found in the sentence.")
+        self.verb, self.verb_word = self.find_verb()
+        if self.verb is None or self.verb_word is None:
+            raise ValueError("No active verb found in the sentence.")
+
+    def _original_sentence(self):
+        original = Sentence([w.deep_copy() for w in self])
+        if self.metadata is None:
+            original.metadata = None
+        else:
+            original.metadata = {key: value for key, value in self.metadata.items()}
+            original.metadata['text'] = original.text
+        return original
+
+    def passivize(self):
+        """
+        Convert the active sentence to passive voice. Note that dependencies in
+        the resulting sentence will not be accurate.
+
+        Returns:
+            Sentence: a deep copy of the sentence, converted to passive voice.
+        """
+        # conservative skip for lexical possession
+        if self.verb_word['lemma'] == 'have':
+            return self._original_sentence()
+        # conservative skip for non-NP-like objects
+        if self.active_object_word['upos'] not in ['NOUN', 'PROPN', 'PRON']:
+            return self._original_sentence()
+
+        words = [w.deep_copy() for w in self]
+        id_to_idx = {w['id']: i for i, w in enumerate(words)}
+
+        def span_from_ids(ids):
+            idxs = [id_to_idx[i] for i in ids if i in id_to_idx]
+            if not idxs:
+                return None
+            return (min(idxs), max(idxs))
+
+        verb_ids = [w['id'] for w in self.verb]
+        subj_ids = [w['id'] for w in self.active_subject]
+        obj_ids = [w['id'] for w in self.active_object]
+        verb_span = span_from_ids(verb_ids)
+        subj_span = span_from_ids(subj_ids)
+        obj_span = span_from_ids(obj_ids)
+        if verb_span is None or subj_span is None or obj_span is None:
+            return self._original_sentence()
+
+        # v1 handles canonical SVO only
+        if not (subj_span[1] < verb_span[0] and verb_span[1] < obj_span[0]):
+            return self._original_sentence()
+
+        next_id = max(w['id'] for w in self if isinstance(w['id'], int)) + 1
+        subj_const = self.passivize_subj()
+        verb_const = self.passivize_verb()
+        agent_const, next_id = self.passivize_agent(next_id)
+
+        passivized_sentence = (words[0:subj_span[0]]
+            + subj_const
+            + words[subj_span[1]+1:verb_span[0]]
+            + verb_const
+            + words[verb_span[1]+1:obj_span[0]]
+            + agent_const
+            + words[obj_span[1]+1:]
+        )
+
+        passivized_sentence = [w.deep_copy() for w in passivized_sentence]
+        passivized_sentence[0]['form'] = passivized_sentence[0]['form'].title()
+        passivized_sentence = Sentence(passivized_sentence)
+        if self.metadata is None:
+            passivized_sentence.metadata = None
+        else:
+            passivized_sentence.metadata = {key: value for key, value in self.metadata.items()}
+            passivized_sentence.metadata['text'] = passivized_sentence.text
+        return passivized_sentence
+
+    def _obj_person_number(self):
+        lemma = self.active_object_word['lemma'].lower()
+        singular_pronouns = {'i', 'me', 'he', 'him', 'she', 'her', 'it'}
+        plural_pronouns = {'we', 'us', 'they', 'them'}
+        if lemma in singular_pronouns:
+            person = 1 if lemma in {'i', 'me'} else 3
+            return person, 'S'
+        if lemma in plural_pronouns:
+            return 3, 'P'
+        if lemma == 'you':
+            return 2, 'P'
+        infl = self.active_object_word['inflection']
+        if infl in ['NNS', 'NNPS']:
+            return 3, 'P'
+        return 3, 'S'
+
+    def passivize_verb(self):
+        """
+        Find the passive form of the verb constituent in the sentence.
+
+        Returns:
+            List: The passive form of the verb constituent.
+        """
+        verb_const = [w.deep_copy() for w in self.verb]
+        verb_const = sorted(verb_const, key=lambda w: w['id'])
+        verb_word = next(filter(lambda w: w['id'] == self.verb_word['id'], verb_const), None)
+        if verb_word is None:
+            return verb_const
+
+        aux_ids = {w['id'] for w in self.verb if w['deprel'] in ['aux', 'aux:pass']}
+        neg_tokens = []
+        for w in self:
+            feats = w.get('feats') or {}
+            if (w['lemma'] == 'not' or w['form'].lower() in ["not", "n't"]) and feats.get('Polarity', None) == 'Neg':
+                if w['head'] == self.verb_word['id'] or w['head'] in aux_ids:
+                    neg_tokens.append(w)
+        if neg_tokens:
+            verb_ids = set(w['id'] for w in verb_const)
+            for n in neg_tokens:
+                if n['id'] not in verb_ids:
+                    verb_const.append(n.deep_copy())
+        verb_const = sorted(verb_const, key=lambda w: w['id'])
+
+        do_inflection = None
+        removed_do = False
+        for w in list(verb_const):
+            if w['deprel'] == 'aux' and w['lemma'] == 'do':
+                do_inflection = w['inflection']
+                verb_const.remove(w)
+                removed_do = True
+
+        has_modal = any(w['deprel'] == 'aux' and w['xpos'] == 'MD' for w in verb_const)
+        has_have = any(w['deprel'] == 'aux' and w['lemma'] == 'have' for w in verb_const)
+        has_be_aux = any(w['deprel'] == 'aux' and w['lemma'] == 'be' for w in verb_const)
+
+        if has_modal:
+            be_inflection = 'VB'
+        elif has_have:
+            be_inflection = 'VBN'
+        elif has_be_aux and verb_word['inflection'] == 'VBG':
+            be_inflection = 'VBG'
+        else:
+            base_infl = do_inflection or verb_word['inflection']
+            be_inflection = 'VBD' if base_infl in ['VBD', 'VBN'] else 'VBP'
+
+        be_form = getInflection('be', be_inflection)
+        be_word = Word(token_dict={
+            "id": max(w['id'] for w in self if isinstance(w['id'], int)) + 1,
+            "form": be_form[0] if be_form else "be",
+            "lemma": "be",
+            "upos": "AUX",
+            "xpos": be_inflection,
+            "feats": None,
+            "head": self.verb_word['id'],
+            "deprel": "aux:pass",
+            "deps": None,
+            "misc": None
+        }, inflection=be_inflection)
+
+        verb_idx = next(i for i, w in enumerate(verb_const) if w['id'] == verb_word['id'])
+        has_existing_aux = has_modal or has_have or has_be_aux
+        if neg_tokens and not has_existing_aux:
+            neg_ids = {n['id'] for n in neg_tokens}
+            insert_idx = next((i for i, w in enumerate(verb_const) if w['id'] in neg_ids), verb_idx)
+            verb_const.insert(insert_idx, be_word)
+        else:
+            verb_const.insert(verb_idx, be_word)
+
+        vbn_form = getInflection(verb_word['lemma'], 'VBN')
+        if vbn_form:
+            verb_word['form'] = vbn_form[0]
+        verb_word['inflection'] = 'VBN'
+        verb_word['xpos'] = 'VBN'
+
+        person, number = self._obj_person_number()
+        verb_tense_key = {
+            'VB': 'present',
+            'VBD': 'past',
+            'VBN': 'past',
+            'VBP': 'present',
+            'VBZ': 'present'
+        }
+        verb_infl_key = {
+            '1Spast': 'VBD',
+            '2Spast': 'VBD',
+            '3Spast': 'VBD',
+            '1Ppast': 'VBD',
+            '2Ppast': 'VBD',
+            '3Ppast': 'VBD',
+            '1Spresent': 'VBP',
+            '2Spresent': 'VBP',
+            '3Spresent': 'VBZ',
+            '1Ppresent': 'VBP',
+            '2Ppresent': 'VBP',
+            '3Ppresent': 'VBP',
+        }
+
+        finite_word = None
+        for w in verb_const:
+            if w['deprel'] in ['aux', 'aux:pass'] and w['xpos'] != 'MD':
+                finite_word = w
+                break
+        if finite_word and (not has_modal or removed_do):
+            finite_tense = verb_tense_key.get((do_inflection or finite_word['inflection']), 'present')
+            target_infl = verb_infl_key[f'{person}{number}{finite_tense}']
+            infl_idx = -1 if person == 2 or number == 'P' else 0
+            new_form = getInflection(finite_word['lemma'], target_infl)
+            if new_form:
+                finite_word['form'] = new_form[infl_idx]
+            finite_word['inflection'] = target_infl
+            finite_word['xpos'] = target_infl
+
+        return verb_const
+
+    def passivize_subj(self):
+        """
+        Find the passive subject form of the active object constituent.
+
+        Returns:
+            List: The passive subject constituent.
+        """
+        obj_const = [w.deep_copy() for w in self.active_object]
+        pron_key = {
+            "me": "I",
+            "him": "he",
+            "her": "she",
+            "us": "we",
+            "them": "they",
+        }
+        for w in obj_const:
+            if w['form'].lower() in pron_key:
+                w['form'] = pron_key[w['form'].lower()]
+        return obj_const
+
+    def passivize_agent(self, next_id):
+        """
+        Find the passive agent form of the active subject constituent.
+
+        Returns:
+            tuple: (The passive agent constituent, next_id)
+        """
+        agent_const = [w.deep_copy() for w in self.active_subject]
+        pron_key = {
+            "i": "me",
+            "he": "him",
+            "she": "her",
+            "we": "us",
+            "they": "them",
+        }
+        for w in agent_const:
+            if w['form'].lower() in pron_key:
+                w['form'] = pron_key[w['form'].lower()]
+        if agent_const and agent_const[0]['upos'] != 'PROPN':
+            agent_const[0]['form'] = agent_const[0]['form'].lower()
+
+        by_word = Word(token_dict={
+            "id": next_id,
+            "form": "by",
+            "lemma": "by",
+            "upos": "ADP",
+            "xpos": "IN",
+            "feats": None,
+            "head": self.active_subject_word['id'],
+            "deprel": "case",
+            "deps": None,
+            "misc": None
+        }, inflection='IN')
+        return [by_word] + agent_const, next_id + 1
+
+    def find_act_subj(self):
+        """
+        Extract the active subject + constituent from this sentence.
+
+        Returns:
+            tuple: (list of Word objects in the active subject subtree, Word object of the active subject)
+        """
+        subj = next(filter(lambda w: w['deprel'] == "nsubj", self), None)
+        if subj is None:
+            return None, None
+        subj_subtree = build_subtree(subj)
+        return subj_subtree, subj
+
+    def find_act_obj(self):
+        """
+        Extract the active object + constituent from this sentence.
+
+        Returns:
+            tuple: (list of Word objects in the active object subtree, Word object of the active object)
+        """
+        obj = next(filter(lambda w: w['deprel'] == "obj", self), None)
+        if obj is None:
+            return None, None
+        obj_subtree = build_subtree(obj)
+        return obj_subtree, obj
+
+    def find_verb(self):
+        """
+        Extract the verb + constituent from this sentence.
+
+        Returns:
+            tuple: (list of Word objects in the verb subtree, Word object of the verb)
+        """
+        verb = None
+        if self.active_subject_word['head'] > 0:
+            verb = next(filter(lambda w: w['id'] == self.active_subject_word['head'], self), None)
+        if verb is None or verb['upos'] != "VERB":
+            return None, None
+        if self.active_object_word['head'] != verb['id']:
+            return None, None
+        verb_subtree = build_subtree(verb,
+                                upos=['ADV'],
+                                deprel=['aux', 'cc'])
+        verb_subtree = Sentence(list(filter(lambda w: w['upos'] != 'ADV' or w['id'] < verb['id'], verb_subtree)))
+        return verb_subtree, verb
