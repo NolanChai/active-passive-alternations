@@ -7,9 +7,10 @@ import pandas as pd
 import torch
 from conllu import parse, parse_incr
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from units import Document, Sentence, Word
 from tqdm import tqdm
-from utils import *
+
+from src.units import Document, Sentence, Word
+from src.utils import *
 
 # moved from UID.ipynb -- will clean up soon
 
@@ -100,8 +101,9 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
     
 
 
-def load_lm(model_name="distilgpt2"):
+def load_lm(model_name="distilgpt2", device=None):
     # note - using distilgpt for fast prototyping, use gpt-2 for final
+    assert device is not None, "Please specify device."
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
@@ -109,13 +111,6 @@ def load_lm(model_name="distilgpt2"):
         tokenizer.bos_token = tokenizer.eos_token
 
     model.eval()
-
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")  # metal for mac
-    else:
-        device = torch.device("cpu")
 
     model.to(device)
     return tokenizer, model, device
@@ -196,9 +191,9 @@ def build_context(
 def compute_surprisal(sentence,
                       context,
                       sentences,
+                      sent_idx,
                       tokenizer,
                       model,
-                      sent_idx,
                       max_len=None,
                       device=None,
                       uid_level="sentence"):
@@ -228,7 +223,7 @@ def compute_surprisal(sentence,
 
     input_ids, start, end = get_input_start_end(sent_ids, context_ids, document_ids,
                                                 uid_level, sent_idx)
-    input_ids.to(device)
+    input_ids = torch.tensor(input_ids, device=device)
 
     with torch.no_grad():
         logits = model(input_ids).logits
@@ -298,38 +293,58 @@ def uid_metrics(surprisals,
         "uid_len": len(arr),
     }
 
-
-def run_uid_pipeline(
-    ud_path,
-    model_name="distilgpt2",
-    limit_docs=3,
-    limit_sents_per_doc=8,
-    context_levels=None,
-    generate_counterfactual=False
-):
-    if generate_counterfactual:
-        docs = iter_counterfactual_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
-    else:
-        docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
-    tokenizer, model, device = load_lm(model_name=model_name)
-
-    if context_levels is None:
-        context_levels = [
-            {"name": "sentence", "mode": "none"},
-            {"name": "prev1", "mode": "prev", "k": 1},
-            {"name": "prev3", "mode": "prev", "k": 3},
-            {"name": "document", "mode": "doc"},
+def map_context_levels(levels):
+        context_mapping = {
+            "sentence": {"name": "sentence", "mode": "none"},
+            "prev1": {"name": "prev1", "mode": "prev", "k": 1},
+            "prev3": {"name": "prev3", "mode": "prev", "k": 3},
+            "document": {"name": "document", "mode": "doc"},
             
             # sent[-L,+R] = sentence window with L sentences before, R after
             # tok[-L,+R]  = token window with L tokens before, R after
-            {"name": "sent[-2,+0]", "mode": "window", "window": {"type": "sent", "side": "left", "size": 2}},
-            {"name": "sent[-2,+2]", "mode": "window", "window": {"type": "sent", "side": "both", "size": 2}},
-            {"name": "tok[-64,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 64}},
-            {"name": "tok[-64,+64]", "mode": "window", "window": {"type": "token", "side": "both", "size": 64}},
-        ]
+            "sent[-2,+0]": {"name": "sent[-2,+0]", "mode": "window", "window": {"type": "sent", "side": "left", "size": 2}},
+            "sent[-2,+2]": {"name": "sent[-2,+2]", "mode": "window", "window": {"type": "sent", "side": "both", "size": 2}},
+            "tok[-64,+0]": {"name": "tok[-64,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 64}},
+            "tok[-64,+64]": {"name": "tok[-64,+64]", "mode": "window", "window": {"type": "token", "side": "both", "size": 64}},
+        }
+        if levels is None:
+            return list(context_mapping.values())
+        return [context_mapping[level] for level in levels]
+
+def run_uid_pipeline(
+        ud_path,
+        model_name="distilgpt2",
+        limit_docs=3,
+        limit_sents_per_doc=8,
+        context_levels=None,
+        generate_counterfactual=False,
+        uid_level="sentence",
+        device=None
+    ):
+    print(f"Processing {ud_path}...")
+    
+    # Set up device
+    if device is None:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")  # metal for mac
+        else:
+            device = torch.device("cpu")
+    
+    # Generate counterfactual documents if applicable
+    if generate_counterfactual:
+        print("Generating counterfactual documents...", end="")
+        docs = iter_counterfactual_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
+        print(" Done")
+    else:
+        docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
+    tokenizer, model, device = load_lm(model_name=model_name, device=device)
 
     rows = []
     
+    context_levels = map_context_levels(context_levels)
+    print("Calculating Surprisals...")
     for doc_id, sents in docs:
         sents_pbar = tqdm(
             total=len(sents),
@@ -350,8 +365,9 @@ def run_uid_pipeline(
                     tokenizer=tokenizer,
                 )
                 tokens, surprisals = compute_surprisal(
-                    sent, context, sents,
-                    sent_idx=i, tokenizer=tokenizer, model=model, device=device
+                    sent, context, sents, i, 
+                    tokenizer=tokenizer, model=model, device=device,
+                    uid_level=uid_level
                 )
                 metrics = uid_metrics(surprisals)
                 row = {
@@ -364,5 +380,6 @@ def run_uid_pipeline(
                 rows.append(row)
             sents_pbar.update(1)
         sents_pbar.close()
+    print("Done")
     uid_df = pd.DataFrame(rows)
     return uid_df

@@ -2,9 +2,10 @@ import conllu
 import deplacy
 from pyinflect import getAllInflections, getInflection
 from conllu import TokenList
-from units.sentence import Sentence
 import numpy as np
 import torch
+
+from src.units import *
 
 def render_tree(sent):
     """Render a dependency tree with deplacy.

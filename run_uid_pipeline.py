@@ -6,13 +6,17 @@ import pandas as pd
 import re
 
 def main():
+    # Required
     parser = argparse.ArgumentParser(description='Run Active/Passive switch script and UID calculation scripts on a given UD corpus.')
-    parser.add_argument("data_dir", type=str, help="Path to folder containing .conllu files to process.") 
+    parser.add_argument("data_dir", type=str, help="Path to folder containing .conllu files to process.")
     parser.add_argument("model",type=str, help="Model to use for surprisal calculations.")
-    parser.add_argument("--context", "-c", type=str, default=None, help="The context level for UID calculation. Choose between sentence, prev1, prev3, document, sent[-2,+0], sent[-2,+2], tok[-64,+0], or tok[-64,+64].")
+    # Optional
+    parser.add_argument("--context", "-c", type=str, default=None, help="(Optional) The context level for UID calculation. Choose between sentence, prev1, prev3, document, sent[-2,+0], sent[-2,+2], tok[-64,+0], or tok[-64,+64]. Defaults to all.")
+    parser.add_argument("--generate_counterfactual", "-cf", action="store_true", help="Include to generate counterfactual documents to compare to.")    
     parser.add_argument("--limit_docs", type=int, default=None, help="(Optional) The number of documents to process.")
     parser.add_argument("--limit_sents_per_doc", type=int, default=None, help="(Optional) The number of sentences per document to process.")
-    parser.add_argument("--generate_counterfactual", "-cf", action="store_true", help="Include to generate counterfactual documents to compare to.")
+    parser.add_argument("--uid_level", type=str, default="sentence", help="(Optional) Linguistic unit for which UID is analyzed. Choose between 'sentence' (default), 'document', or '(-a, +b)', in which a tokens before and b tokens after the target sentence will be analyzed.")
+    parser.add_argument("--device", type=int, default=None, help="(Optional) Override device used.")
     
     args, unk = parser.parse_known_args()
     
@@ -43,7 +47,9 @@ def main():
             limit_docs=args.limit_docs,
             limit_sents_per_doc=args.limit_sents_per_doc,
             context_levels=args.context,
-            generate_counterfactual=args.generate_counterfactual
+            generate_counterfactual=args.generate_counterfactual,
+            uid_level=args.uid_level,
+            device=args.device
         )
         uid_dfs.append(uid_df)
     uid_dfs = pd.concat(uid_dfs)
