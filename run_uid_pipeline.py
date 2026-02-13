@@ -17,6 +17,8 @@ def main():
     parser.add_argument("--limit_sents_per_doc", type=int, default=None, help="(Optional) The number of sentences per document to process.")
     parser.add_argument("--uid_level", type=str, default="sentence", help="(Optional) Linguistic unit for which UID is analyzed. Choose between 'sentence' (default), 'document', or '(-a, +b)', in which a tokens before and b tokens after the target sentence will be analyzed.")
     parser.add_argument("--device", type=int, default=None, help="(Optional) Override device used.")
+    parser.add_argument("--output_dir", type=str, default=None, help="(Optional) Output directory")
+    parser.add_argument("--output_name", type=str, default="passives_uid_calcs.csv", help="(Optional) Name of output file")
     
     args, unk = parser.parse_known_args()
     
@@ -38,7 +40,13 @@ def main():
             else:
                 extra_args[key] = value
 
+    # Paths
     UD_paths = Path(args.data_dir).iterdir()
+    output_dir = Path(args.output_dir)
+    output_file = Path(args.output_name).with_suffix(".csv")
+    output_filepath = output_dir / output_file
+    
+    
     uid_dfs = []
     for UD_path in UD_paths:
         uid_df = run_uid_pipeline(
@@ -53,8 +61,7 @@ def main():
         )
         uid_dfs.append(uid_df)
     uid_dfs = pd.concat(uid_dfs)
-    uid_dfs.to_csv("passives_uid_calcs.csv")
+    uid_dfs.to_csv(output_filepath)
     
-
 if __name__ == "__main__":
     main()
