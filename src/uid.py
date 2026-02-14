@@ -8,6 +8,12 @@ import torch
 from conllu import parse, parse_incr
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
+import stanza
+stanza.download('en')
+nlp = stanza.Pipeline(
+    lang="en",
+    processors="tokenize,mwt,pos,lemma,depparse"
+)
 
 from src.units import Document, Sentence, Word
 from src.utils import *
@@ -58,13 +64,14 @@ def iter_ud_docs(path, limit_docs=None, limit_sents_per_doc=None):
 
 def extend_doc_list(docs, current, current_id):
     curr_doc = Document(current)
-    converted_docs = list(curr_doc.convert_all())
+    converted_docs = curr_doc.convert_all()
     curr_doc_text = [s.text for s in curr_doc]
     docs.append((f'f::{current_id}::-1', curr_doc_text))
     
     if len(converted_docs) > 0:
-        counterf_docs, pass_idxs = zip(*converted_docs)
-        counterf_ids = (f'cf::{current_id}::{pass_idx}' for pass_idx in pass_idxs)
+        counterf_docs, pass_idxs, conversions = zip(*converted_docs)
+        counterf_ids = (f'cf::{current_id}::{pass_idx}::{conv}' 
+                        for pass_idx, conv in zip(pass_idxs, conversions))
         counterf_doc_texts = [[s.text for s in counterf_doc] 
                             for counterf_doc in counterf_docs]
         counterf_doc_tuples = zip(counterf_ids, counterf_doc_texts)
@@ -197,6 +204,24 @@ def compute_surprisal(sentence,
                       max_len=None,
                       device=None,
                       uid_level="sentence"):
+    """Compute the surprisal for the given sentence with a causal LM, given
+    context level and uid level.
+
+    Args:
+        sentence (str): sentence to compute
+        context (str): context level to give the model before the sentence
+        sentences (List[str]): list of all sentences in the current document
+        sent_idx (int): index of `sentence` within `sentences`
+        tokenizer (AutoTokenizer): tokenizer for the model
+        model (AutoModelForCausalLM): model to use for surprisal calc
+        max_len (int, optional): max length of the context + sentence. Defaults to None.
+        device (str, optional): device that the model is on. Defaults to None.
+        uid_level (str, optional): level at which to calculate UID. Defaults to "sentence".
+
+    Returns:
+        (List[int], List[float]): token ids and surprisals at the given UID level
+    """
+    # tokenize
     context_ids = tokenizer.encode(context, add_special_tokens=False)
     sent_ids = tokenizer.encode(sentence, add_special_tokens=False)
     
@@ -208,6 +233,7 @@ def compute_surprisal(sentence,
     # Add BOS to allow a probability for the first token
     context_ids = [tokenizer.bos_token_id] + context_ids
 
+    # Deal with overflow + length
     max_len = max_len or getattr(tokenizer, "model_max_length", 1024)
     total_len = len(context_ids) + len(sent_ids)
     if total_len > max_len:
@@ -221,24 +247,30 @@ def compute_surprisal(sentence,
     if device is None:
         device = model.device
 
+    # get proper input for the model based on context level 
+    # and the proper extracted window based on uid level
     input_ids, start, end = get_input_start_end(sent_ids, context_ids, document_ids,
                                                 uid_level, sent_idx)
     input_ids = torch.tensor(input_ids, device=device)
 
+    # run through model
     with torch.no_grad():
         logits = model(input_ids).logits
         log_probs = torch.log_softmax(logits, dim=-1)
     
     surprisals = []
-    tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
 
+    # compute surprisals
     for i in range(start, end):
         token_id = input_ids[0, i]
         lp = log_probs[0, i - 1, token_id]
         surprisal = (-lp / math.log(2)).item()
         surprisals.append(surprisal)
 
+    # re-code tokens
+    tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
     sent_tokens = tokens[start:end]
+    
     return sent_tokens, surprisals
 
 def get_input_start_end(sent_ids,
@@ -251,7 +283,7 @@ def get_input_start_end(sent_ids,
         start = len(context_ids)
         end = input_ids.size(1)
     elif uid_level == "document":
-        input_ids = [[id for id in sent for sent in doc_ids]]
+        input_ids = [[id for sent in doc_ids for id in sent]]
         start = 0
         end = len(input_ids[0])
     elif key := re.search(r"[\(\[]\-(\d+)\, *\+(\d+)[\)\]]", uid_level):
@@ -263,7 +295,7 @@ def get_input_start_end(sent_ids,
         start = len(context_ids) - before
         end = len(input_ids[0])
     else:
-        raise ValueError(f"uid level value of {uid_level} not yet supported.")
+        raise ValueError(f"UID Level {uid_level} not supported.")
         
     return input_ids, start, end
     
@@ -311,6 +343,64 @@ def map_context_levels(levels):
             return list(context_mapping.values())
         return [context_mapping[level] for level in levels]
 
+def process_surprisals(tokenizer,
+                       tokens,
+                       surprisals,
+                       sentences,
+                       uid_unit="token"):
+    """Processes surprisals to the level of the given unit.
+
+    Args:
+        tokenizer (AutoTokenizer): tokenizer used to tokenize document.
+        tokens (_type_): _description_
+        surprisals (_type_): _description_
+        uid_unit (str, optional): _description_. Defaults to "token".
+        
+    TODO: Should we split by sentence in compute_surprisal before returning to make this cleaner?
+    * Either way, we have to combine together to feed into model then split again
+    """
+    # skip if token-level
+    if uid_unit == "token":
+        return surprisals
+
+    result_surprisals = []
+    # decode and split text by sentence
+    sentence_token_ids = [tokenizer.encode(s, add_special_tokens=False)
+                            for s in sentences]
+    assert sum(len(s) for s in sentence_token_ids) == len(surprisals), "dimension mismatch between surprisals and tokens"
+    
+    # calculate uid units
+    if uid_unit == "word":
+        curr_idx = 0
+        for sent_tokens in sentence_token_ids:
+            sent_length = len(sent_tokens)
+            curr_sentence = zip(tokens[curr_idx:curr_idx+sent_length], 
+                                surprisals[curr_idx:curr_idx+sent_length])
+            curr_surprisal = 0
+            curr_word = ""
+            for tok, surp in curr_sentence:
+                if tok in tokenizer.all_special_tokens:
+                    continue
+                elif tok.startswith("Ġ") or tok.startswith("_"):
+                    result_surprisals.append(curr_surprisal)
+                    curr_surprisal = surp
+                    curr_word = tok
+                else:
+                    curr_surprisal += surp
+                    curr_word += tok
+            result_surprisals.append(curr_surprisal)
+            curr_idx += sent_length
+    elif uid_unit == "sentence":
+        # loop through surprisals and add by sentence
+        surp_idx = 0
+        for sent_tokens in sentence_token_ids:
+            sent_surprisals = surprisals[surp_idx:surp_idx + len(sent_tokens)]
+            surp_idx += len(sent_tokens)
+            result_surprisals.append(sum(sent_surprisals))
+    else:
+        raise ValueError(f"UID Unit {uid_unit} not supported.")
+    return result_surprisals
+
 def run_uid_pipeline(
         ud_path,
         model_name="distilgpt2",
@@ -319,10 +409,10 @@ def run_uid_pipeline(
         context_levels=None,
         generate_counterfactual=False,
         uid_level="sentence",
+        uid_unit="token",
         device=None
     ):
     print(f"Processing {ud_path}...")
-    
     # Set up device
     if device is None:
         if torch.cuda.is_available():
@@ -369,6 +459,8 @@ def run_uid_pipeline(
                     tokenizer=tokenizer, model=model, device=device,
                     uid_level=uid_level
                 )
+                surprisals = process_surprisals(tokenizer, tokens, surprisals, sents,
+                                                uid_unit=uid_unit)
                 metrics = uid_metrics(surprisals)
                 row = {
                     "doc_id": doc_id,

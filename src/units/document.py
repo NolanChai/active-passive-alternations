@@ -46,8 +46,7 @@ class Document(list[Sentence]):
         Converts each convertible passive sentence -> active and each active sentence -> 
         passive, one at a time. Results in num_passives + num_actives counterfactual documents.
         Returns:
-            list[tuple(Document, int, str)]: List of (Document, idx, conversion) pairs, 
-            where idx is the index of the converted sentence and conversion is the conversion applied.
+            List[tuple(Document, int, str)]: List of (Document, idx, conversion) pairs, where idx is the index of the converted sentence and conversion is the conversion applied.
         """
         result = []
         target_indices = [-1]
@@ -79,7 +78,7 @@ class Document(list[Sentence]):
             # print(counterfactual_doc[1])
             # print(counterfactual_doc[1].metadata)
             result.append(Document(counterfactual_doc))
-        return zip(result, target_indices[1:], conversions)
+        return list(zip(result, target_indices[1:], conversions))
     
     def format_doc(self):
         """Formats text in the document from sentences, putting a newline at 
