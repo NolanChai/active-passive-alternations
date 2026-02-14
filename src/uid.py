@@ -461,6 +461,8 @@ def run_uid_pipeline(
                 )
                 surprisals = process_surprisals(tokenizer, tokens, surprisals, sents,
                                                 uid_unit=uid_unit)
+                if len(surprisals) < 2:
+                    raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
                 metrics = uid_metrics(surprisals)
                 row = {
                     "doc_id": doc_id,
