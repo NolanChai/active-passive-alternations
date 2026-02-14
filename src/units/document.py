@@ -3,7 +3,7 @@ from pyinflect import getAllInflections, getInflection
 import conllu
 from conllu import Token, TokenList
 from .word import Word
-from .sentence import Sentence, PassiveSentence
+from .sentence import Sentence, PassiveSentence, ActiveSentence
 
 class Document(list[Sentence]):
     """
@@ -14,9 +14,13 @@ class Document(list[Sentence]):
         sentence_list = []
         for s in sentences:
             try:
-                sentence_list.append(PassiveSentence(s))
+                s = Sentence(s)
+                if s.is_passive:
+                    sentence_list.append(PassiveSentence(s))
+                else:
+                    sentence_list.append(ActiveSentence(s))
             except ValueError:
-                sentence_list.append(Sentence(s))
+                sentence_list.append(s)
         super().__init__(sentence_list)
         
         # First sentence only should contain document metadata
@@ -35,39 +39,47 @@ class Document(list[Sentence]):
         self.text = self.format_doc()
         
         self.num_passives = sum(map(lambda s: isinstance(s, PassiveSentence), self))
-        self.num_actives = len(self) - self.num_passives # redefine once actives are more defined
+        self.num_actives = sum(map(lambda s: isinstance(s, ActiveSentence), self))
     
     def convert_all(self):
         """
-        Converts each passive sentence -> active and (TODO) each active sentence -> 
+        Converts each convertible passive sentence -> active and each active sentence -> 
         passive, one at a time. Results in num_passives + num_actives counterfactual documents.
         Returns:
-            list[tuple(Document, idx)]: List of (Document, idx) pairs, where idx is the index of the converted sentence.
+            list[tuple(Document, int, str)]: List of (Document, idx, conversion) pairs, 
+            where idx is the index of the converted sentence and conversion is the conversion applied.
         """
         result = []
-        passive_indices = [-1]
-        for _ in range(self.num_passives):
+        target_indices = [-1]
+        conversions = []
+        for _ in range(self.num_passives + self.num_actives):
             counterfactual_doc = []
-            # append all sentences up to previously found passive
-            for s in self[:passive_indices[-1] + 1]:
+            # append all sentences up to previously found target
+            for s in self[:target_indices[-1] + 1]:
                 counterfactual_doc.append(s.deep_copy())
-            # append until we find a passive; depassivize and append
-            for i, s in enumerate(self[passive_indices[-1] + 1:]):
+            # append until we find a convertable sentence; convert and append
+            for i, s in enumerate(self[target_indices[-1] + 1:]):
                 if isinstance(s, PassiveSentence):
                     counterfactual_doc.append(s.depassivize())
                     # update index of previous passive
-                    passive_indices.append(passive_indices[-1] + i + 1)
+                    target_indices.append(target_indices[-1] + i + 1)
+                    conversions.append("p>a")
+                    break
+                elif isinstance(s, ActiveSentence):
+                    counterfactual_doc.append(s.passivize())
+                    target_indices.append(target_indices[-1] + i + 1)
+                    conversions.append("a>p")
                     break
                 else:
                     counterfactual_doc.append(s.deep_copy())
             # append remaining sentences
-            for s in self[passive_indices[-1] + 1:]:
+            for s in self[target_indices[-1] + 1:]:
                 counterfactual_doc.append(s.deep_copy())
             # print(len(counterfactual_doc))
             # print(counterfactual_doc[1])
             # print(counterfactual_doc[1].metadata)
             result.append(Document(counterfactual_doc))
-        return zip(result, passive_indices[1:])
+        return zip(result, target_indices[1:], conversions)
     
     def format_doc(self):
         """Formats text in the document from sentences, putting a newline at 
