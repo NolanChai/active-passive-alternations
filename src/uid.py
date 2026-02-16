@@ -307,7 +307,7 @@ def uid_metrics(surprisals,
         return {}
     arr = np.array(surprisals)
     uni_arr = np.array(uni_probs)
-    uni_arr = -np.log(uni_arr) / np.log(2) # probs > surps
+    uni_arr = -np.log(uni_arr + 1e-5) / np.log(2) # probs -> surps
     mean = arr.mean()
     slor = (arr.sum() - uni_arr.sum()) / len(arr)
     std = arr.std()
@@ -435,7 +435,7 @@ def run_uid_pipeline(
     else:
         docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
     tokenizer, model, device = load_lm(model_name=model_name, device=device)
-    docs_text = " ".join([doc[1].text for doc in docs])
+    docs_text = "\n".join(["\n".join(doc[1]) for doc in docs])
     unigram = UnigramLM(tokenizer)
     unigram.fit(docs_text, uid_unit=uid_unit)
 
