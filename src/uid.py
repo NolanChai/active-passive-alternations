@@ -253,6 +253,7 @@ def compute_surprisal(sentence,
         else:
             input_ids = input_ids[:-overflow]
 
+    assert len(input_ids) <= max_len, "Input Length Mismatch"
     # run through model
     with torch.no_grad():
         logits = model(input_ids).logits
