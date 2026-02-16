@@ -194,6 +194,32 @@ def build_context(
 
     return ""
 
+def truncate_doc_ids(document_ids, trunc_from_left=0, trunc_from_right=0):
+    result = []
+    total_len = sum([len(sent) for sent in document_ids])
+    result_len = total_len - trunc_from_left - trunc_from_right
+    assert result_len > 0, "Cannot truncate more than document length!"
+    
+    trunc_left_remaining = trunc_from_left
+    curr_len = 0
+    for sent in document_ids:
+        curr_sent = []
+        
+        for tok_id in sent:
+            if curr_len >= result_len:
+                break
+            if trunc_left_remaining:
+                trunc_left_remaining -= 1
+                continue
+            curr_sent.append(tok_id)
+            curr_len += 1
+            
+        if curr_sent:
+            result.append(curr_sent)
+        if curr_len >= result_len:
+            break
+    return result
+        
 
 # token level surprisal for the current sentence only
 def compute_surprisal(sentence,
@@ -241,20 +267,27 @@ def compute_surprisal(sentence,
     # and the proper extracted window based on uid level
     input_ids, start, end = get_input_start_end(sent_ids, context_ids, document_ids,
                                                 uid_level, sent_idx)
-    input_ids = torch.tensor(input_ids, device=device)    
-    
     # Deal with overflow + length
     max_len = max_len or getattr(tokenizer, "model_max_length", 1024)
-    total_len = len(input_ids)
+    total_len = len(input_ids[0])
+    # print("LENGTHS:", max_len, total_len) # TEMPORARY
     if total_len > max_len:
+        print(f"WARNING: Input length {total_len} exceeds model context length {max_len}.")
+        print("Resizing inputs to match...")
         overflow = total_len - max_len
         if overflow < len(context_ids):
-            input_ids = input_ids[overflow:]
+            input_ids = [input_ids[0][overflow:]]
+            start = max(start - overflow, 0)
+            end = end - overflow
         else:
-            input_ids = input_ids[:-overflow]
+            input_ids = [input_ids[0][:-overflow]]
+            end = min(end, len(input_ids[0]))
+        print(f"New input length: {len(input_ids[0])}")
+        # print(f"New start and end:", start, end) # TEMPORARY
 
-    assert len(input_ids) <= max_len, "Input Length Mismatch"
+    assert len(input_ids[0]) <= max_len, "Input Length Mismatch"
     # run through model
+    input_ids = torch.tensor(input_ids, device=device)
     with torch.no_grad():
         logits = model(input_ids).logits
         log_probs = torch.log_softmax(logits, dim=-1)
@@ -263,13 +296,18 @@ def compute_surprisal(sentence,
 
     # compute surprisals
     for i in range(start, end):
-        token_id = input_ids[0, i]
-        lp = log_probs[0, i - 1, token_id]
-        surprisal = (-lp / math.log(2)).item()
-        surprisals.append(surprisal)
+        try:
+            token_id = input_ids[0, i]
+            lp = log_probs[0, i - 1, token_id]
+            surprisal = (-lp / math.log(2)).item()
+            surprisals.append(surprisal)
+        except IndexError:
+            continue
 
     # re-code tokens
+    # print("Process tokens IDS:", len(input_ids[0])) # TEMPORARY
     tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
+    # print("Tokens length:", len(tokens)) # TEMPORARY
     sent_tokens = tokens[start:end]
     
     return sent_tokens, surprisals
@@ -351,7 +389,6 @@ def map_context_levels(levels):
 def process_surprisals(tokenizer,
                        tokens,
                        surprisals,
-                       sentences,
                        uid_unit="token"):
     """Processes surprisals to the level of the given unit.
 
@@ -370,9 +407,12 @@ def process_surprisals(tokenizer,
 
     result_surprisals = []
     # decode and split text by sentence
-    sentence_token_ids = [tokenizer.encode(s, add_special_tokens=False)
-                            for s in sentences]
-    assert sum(len(s) for s in sentence_token_ids) == len(surprisals), "dimension mismatch between surprisals and tokens"
+    text = tokenizer.convert_tokens_to_string(tokens)
+    sentences = [sent.text for sent in nlp(text).sentences]
+    sentence_token_ids = [tokenizer.encode(sent, add_special_tokens=False)
+                            for sent in sentences]
+    sentence_token_ids_len = sum(len(sent) for sent in sentence_token_ids)
+    assert sentence_token_ids_len == len(surprisals), f"Dimension mismatch between surprisals ({len(surprisals)}) and tokens ({sentence_token_ids_len})"
     
     # calculate uid units
     if uid_unit == "word":
@@ -431,6 +471,7 @@ def run_uid_pipeline(
     if generate_counterfactual:
         print("Generating counterfactual documents...", end="")
         docs = iter_counterfactual_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
+        # docs = docs[11:] # TEMPORARY
         print(" Done")
     else:
         docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
@@ -467,7 +508,7 @@ def run_uid_pipeline(
                     tokenizer=tokenizer, model=model, device=device,
                     uid_level=uid_level
                 )
-                surprisals = process_surprisals(tokenizer, tokens, surprisals, sents,
+                surprisals = process_surprisals(tokenizer, tokens, surprisals,
                                                 uid_unit=uid_unit)
                 uni_probs, _ = unigram(tokens)
                 if len(surprisals) < 2:
