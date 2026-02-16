@@ -601,6 +601,15 @@ class ActiveSentence(Sentence):
             return None
         if self.indirect_object_word is not None:
             return None
+        next_idx = promoted_span[1] + 1
+        if next_idx < len(words):
+            nxt = words[next_idx]
+            misc = nxt.get('misc') or {}
+            if (nxt['upos'] == 'PUNCT'
+                and nxt['form'] in ["'", '"', '“', '‘', "``"]
+                and 'XML' in misc
+                and '<q' in str(misc['XML']).lower()):
+                return None
         if self.verb_word['lemma'] == 'get':
             return None
         if any(c['deprel'] in ['xcomp', 'ccomp', 'conj', 'compound:prt'] for c in self.verb_word['children']):
