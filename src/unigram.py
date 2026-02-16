@@ -4,6 +4,11 @@ from collections import defaultdict
 
 class UnigramLM:
     def __init__(self, tokenizer):
+        """Simple unigram model that supports token-level and word-level calculations.
+
+        Args:
+            tokenizer (AutoTokenizer): Should be the tokenizer of the model used in surprisal calculations.
+        """
         self.model = defaultdict(float)
         self.tokenizer = tokenizer
         self.uid_unit = None
@@ -11,6 +16,18 @@ class UnigramLM:
         self.tokens = None
         
     def fit(self, text, uid_unit="token"):
+        """Fit the Unigram model on given text.
+
+        Args:
+            text (str): text to fit
+            uid_unit (str, optional): Unit to fit, either 'token' or 'word'. Defaults to "token".
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
         token_ids = self.tokenizer.encode(text, add_special_tokens=False)
         tokens = self.tokenizer.convert_ids_to_tokens(token_ids)
         
@@ -52,6 +69,17 @@ class UnigramLM:
         return words
     
     def __call__(self, text):
+        """Get the unigram probabilities of each unit and the total probability of the given text.
+
+        Args:
+            text (str, List[str]): string of full text or list of tokens to process
+
+        Raises:
+            ValueError: If model has invalid unit, or is called before fitting
+
+        Returns:
+            (List[float], float): probabilities of each unit and the total probability (product of each unit's unigram probability)
+        """
         if len(self.model) < 1:
             raise ValueError("Tried to call before fitting unigram model")
         

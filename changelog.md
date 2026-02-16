@@ -1,5 +1,12 @@
 # Changelog
 General use-case changelog to track commits and changes
+### 2/16/2026
+#### Unigram Model
+* Implemented a simple unigram model in `src/unigram.py` to calculate unigram probs for SLOR.
+* Unigram model is trained on entire input dataset.
+#### UID Units
+* Added support for different "units" of UID, i.e. base unit for which UID is calculated.
+* Currently supports 'token',and 'word'. 'sentence' supported by UID calculation script, but not by unigram model.
 ### 2/9/2026
 #### UID Calculation Script
 * Started writing a script (`run_uid_pipeline`) to process conllu files and calculate UID. Script writes out a .csv file with all uid metrics for each sentence in each document. I also added progress bars to help visualize processing time.
