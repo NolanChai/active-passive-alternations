@@ -234,17 +234,6 @@ def compute_surprisal(sentence,
     # Add BOS to allow a probability for the first token
     context_ids = [tokenizer.bos_token_id] + context_ids
 
-    # Deal with overflow + length
-    max_len = max_len or getattr(tokenizer, "model_max_length", 1024)
-    total_len = len(context_ids) + len(sent_ids)
-    if total_len > max_len:
-        overflow = total_len - max_len
-        if overflow < len(context_ids):
-            context_ids = context_ids[overflow:]
-        else:
-            sent_ids = sent_ids[-max_len + 1:]
-            context_ids = [tokenizer.bos_token_id]
-
     if device is None:
         device = model.device
 
@@ -252,7 +241,17 @@ def compute_surprisal(sentence,
     # and the proper extracted window based on uid level
     input_ids, start, end = get_input_start_end(sent_ids, context_ids, document_ids,
                                                 uid_level, sent_idx)
-    input_ids = torch.tensor(input_ids, device=device)
+    input_ids = torch.tensor(input_ids, device=device)    
+    
+    # Deal with overflow + length
+    max_len = max_len or getattr(tokenizer, "model_max_length", 1024)
+    total_len = len(input_ids)
+    if total_len > max_len:
+        overflow = total_len - max_len
+        if overflow < len(context_ids):
+            input_ids = input_ids[overflow:]
+        else:
+            input_ids = input_ids[:-overflow]
 
     # run through model
     with torch.no_grad():
