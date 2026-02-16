@@ -16,6 +16,7 @@ nlp = stanza.Pipeline(
 )
 
 from src.units import Document, Sentence, Word
+from src.unigram import UnigramLM
 from src.utils import *
 
 # moved from UID.ipynb -- will clean up soon
@@ -301,11 +302,14 @@ def get_input_start_end(sent_ids,
     
 # Really basic UID metrics
 def uid_metrics(surprisals, 
-                uid_unit="token"):
+                uni_probs):
     if not surprisals:
         return {}
     arr = np.array(surprisals)
+    uni_arr = np.array(uni_probs)
+    uni_arr = -np.log(uni_arr) / np.log(2) # probs > surps
     mean = arr.mean()
+    slor = (arr.sum() - uni_arr.sum()) / len(arr)
     std = arr.std()
     mad = np.mean(np.abs(arr - mean))
     pwd = (np.diff(arr) ** 2).mean()
@@ -315,7 +319,8 @@ def uid_metrics(surprisals,
     slope = np.polyfit(x, arr, 1)[0] if len(arr) > 1 else 0.0
 
     return {
-        "uid_mean": mean,
+        "surp_mean": mean,
+        "surp_slor": slor,
         "uid_std": std,
         "uid_mad": mad,
         "uid_pwd": pwd,
@@ -430,6 +435,9 @@ def run_uid_pipeline(
     else:
         docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
     tokenizer, model, device = load_lm(model_name=model_name, device=device)
+    docs_text = " ".join([doc[1].text for doc in docs])
+    unigram = UnigramLM(tokenizer)
+    unigram.fit(docs_text, uid_unit=uid_unit)
 
     rows = []
     
@@ -461,9 +469,10 @@ def run_uid_pipeline(
                 )
                 surprisals = process_surprisals(tokenizer, tokens, surprisals, sents,
                                                 uid_unit=uid_unit)
+                uni_probs, _ = unigram(tokens)
                 if len(surprisals) < 2:
                     raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
-                metrics = uid_metrics(surprisals)
+                metrics = uid_metrics(surprisals, uni_probs)
                 row = {
                     "doc_id": doc_id,
                     "sent_idx": i,
