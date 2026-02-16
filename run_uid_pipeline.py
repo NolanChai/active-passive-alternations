@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--limit_sents_per_doc", type=int, default=None, help="(Optional) The number of sentences per document to process.")
     parser.add_argument("--uid_level", type=str, default="sentence", help="(Optional) Linguistic unit for which UID is analyzed. Choose between 'sentence' (default), 'document', or '(-a, +b)', in which a tokens before and b tokens after the target sentence will be analyzed.")
     parser.add_argument("--uid_unit", type=str, default="token", help="(Optional) Smallest linguistic unit for which surprisal is calculated. Choose between 'token' (default), 'word', or 'sentence'.")
-    parser.add_argument("--device", type=int, default=None, help="(Optional) Override device used.")
+    parser.add_argument("--device", type=str, default=None, help="(Optional) Override device used.")
     parser.add_argument("--output_dir", type=str, default=None, help="(Optional) Output directory")
     parser.add_argument("--output_name", type=str, default="passives_uid_calcs.csv", help="(Optional) Name of output file")
     
