@@ -503,25 +503,34 @@ def run_uid_pipeline(
                     window=cfg.get("window"),
                     tokenizer=tokenizer,
                 )
-                tokens, surprisals = compute_surprisal(
-                    sent, context, sents, i, 
-                    tokenizer=tokenizer, model=model, device=device,
-                    uid_level=uid_level
-                )
-                surprisals = process_surprisals(tokenizer, tokens, surprisals,
-                                                uid_unit=uid_unit)
-                uni_probs, _ = unigram(tokens)
-                if len(surprisals) < 2:
-                    raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
-                metrics = uid_metrics(surprisals, uni_probs)
-                row = {
-                    "doc_id": doc_id,
-                    "sent_idx": i,
-                    "context": cfg["name"],
-                    "sentence": sent,
-                }
-                row.update(metrics)
-                rows.append(row)
+                try:
+                    tokens, surprisals = compute_surprisal(
+                        sent, context, sents, i, 
+                        tokenizer=tokenizer, model=model, device=device,
+                        uid_level=uid_level
+                    )
+                    surprisals = process_surprisals(tokenizer, tokens, surprisals,
+                                                    uid_unit=uid_unit)
+                    uni_probs, _ = unigram(tokens)
+                    if len(surprisals) < 2:
+                        raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
+                    metrics = uid_metrics(surprisals, uni_probs)
+                    row = {
+                        "doc_id": doc_id,
+                        "sent_idx": i,
+                        "context": cfg["name"],
+                        "sentence": sent,
+                    }
+                    row.update(metrics)
+                    rows.append(row)
+                except AssertionError as e:
+                    print("Assertion error:", e)
+                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                    continue
+                except ValueError as e:
+                    print("Value error:", e)
+                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                    continue
             sents_pbar.update(1)
         sents_pbar.close()
     print("Done")
