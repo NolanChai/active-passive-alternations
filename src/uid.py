@@ -272,8 +272,8 @@ def compute_surprisal(sentence,
     total_len = len(input_ids[0])
     # print("LENGTHS:", max_len, total_len) # TEMPORARY
     if total_len > max_len:
-        print(f"WARNING: Input length {total_len} exceeds model context length {max_len}.")
-        print("Resizing inputs to match...")
+        # print(f"WARNING: Input length {total_len} exceeds model context length {max_len}.")
+        # print("Resizing inputs to match...")
         overflow = total_len - max_len
         if overflow < len(context_ids):
             input_ids = [input_ids[0][overflow:]]
@@ -347,7 +347,7 @@ def uid_metrics(surprisals,
     uni_arr = np.array(uni_probs)
     uni_arr = -np.log(uni_arr + 1e-5) / np.log(2) # probs -> surps
     mean = arr.mean()
-    slor = (arr.sum() - uni_arr.sum()) / len(arr)
+    slor = (uni_arr.sum() - arr.sum()) / len(arr)
     std = arr.std()
     mad = np.mean(np.abs(arr - mean))
     pwd = (np.diff(arr) ** 2).mean()
@@ -455,7 +455,10 @@ def run_uid_pipeline(
         generate_counterfactual=False,
         uid_level="sentence",
         uid_unit="token",
-        device=None
+        device=None,
+        output_dir=None,
+        output_file=None,
+        save_every=10
     ):
     print(f"Processing {ud_path}...")
     # Set up device
@@ -483,7 +486,9 @@ def run_uid_pipeline(
     rows = []
     
     context_levels = map_context_levels(context_levels)
+    print(f"Docs to process: {len(docs)}")
     print("Calculating Surprisals...")
+    doc_idx = 0
     for doc_id, sents in docs:
         sents_pbar = tqdm(
             total=len(sents),
@@ -493,46 +498,49 @@ def run_uid_pipeline(
             leave=True
         )
         for i, sent in enumerate(sents):
-            for cfg in context_levels:
-                context = build_context(
-                    sents,
-                    i,
-                    mode=cfg["mode"],
-                    k=cfg.get("k"),
-                    max_tokens=cfg.get("max_tokens"),
-                    window=cfg.get("window"),
-                    tokenizer=tokenizer,
-                )
-                try:
-                    tokens, surprisals = compute_surprisal(
-                        sent, context, sents, i, 
-                        tokenizer=tokenizer, model=model, device=device,
-                        uid_level=uid_level
+            try:
+                for cfg in context_levels:
+                    context = build_context(
+                        sents,
+                        i,
+                        mode=cfg["mode"],
+                        k=cfg.get("k"),
+                        max_tokens=cfg.get("max_tokens"),
+                        window=cfg.get("window"),
+                        tokenizer=tokenizer,
                     )
-                    surprisals = process_surprisals(tokenizer, tokens, surprisals,
-                                                    uid_unit=uid_unit)
-                    uni_probs, _ = unigram(tokens)
-                    if len(surprisals) < 2:
-                        raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
-                    metrics = uid_metrics(surprisals, uni_probs)
-                    row = {
-                        "doc_id": doc_id,
-                        "sent_idx": i,
-                        "context": cfg["name"],
-                        "sentence": sent,
-                    }
-                    row.update(metrics)
-                    rows.append(row)
-                except AssertionError as e:
-                    print("Assertion error:", e)
-                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
-                    continue
-                except ValueError as e:
-                    print("Value error:", e)
-                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
-                    continue
+                        tokens, surprisals = compute_surprisal(
+                            sent, context, sents, i, 
+                            tokenizer=tokenizer, model=model, device=device,
+                            uid_level=uid_level
+                        )
+                        surprisals = process_surprisals(tokenizer, tokens, surprisals,
+                                                        uid_unit=uid_unit)
+                        uni_probs, _ = unigram(tokens)
+                        if len(surprisals) < 2:
+                            raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
+                        metrics = uid_metrics(surprisals, uni_probs)
+                        row = {
+                            "doc_id": doc_id,
+                            "sent_idx": i,
+                            "context": cfg["name"],
+                            "sentence": sent,
+                        }
+                        row.update(metrics)
+                        rows.append(row)
+            except AssertionError as e:
+                print("Assertion error:", e)
+                print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                continue
+            except ValueError as e:
+                print("Value error:", e)
+                print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                continue
             sents_pbar.update(1)
         sents_pbar.close()
+        if doc_idx % save_every == 0:
+            temp_df = pd.DataFrame(rows)
+            temp_df.to_csv(output_dir / output_file.stem + "_chkpt.csv")
     print("Done")
     uid_df = pd.DataFrame(rows)
     return uid_df

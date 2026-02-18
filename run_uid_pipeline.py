@@ -59,7 +59,9 @@ def main():
             generate_counterfactual=args.generate_counterfactual,
             uid_level=args.uid_level,
             uid_unit=args.uid_unit,
-            device=args.device
+            device=args.device,
+            output_dir=output_dir,
+            output_file=output_file
         )
         uid_dfs.append(uid_df)
     uid_dfs = pd.concat(uid_dfs)
