@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 import pandas as pd
 import re
+import warnings
+warnings.filterwarnings("ignore")
 
 def main():
     # Required
@@ -20,6 +22,7 @@ def main():
     parser.add_argument("--device", type=str, default=None, help="(Optional) Override device used.")
     parser.add_argument("--output_dir", type=str, default=None, help="(Optional) Output directory")
     parser.add_argument("--output_name", type=str, default="passives_uid_calcs.csv", help="(Optional) Name of output file")
+    parser.add_argument("--verbose", action="store_true", help="Set verbosity")
     
     args, unk = parser.parse_known_args()
     
@@ -61,7 +64,8 @@ def main():
             uid_unit=args.uid_unit,
             device=args.device,
             output_dir=output_dir,
-            output_file=output_file
+            output_file=output_file,
+            verbose=args.verbose
         )
         uid_dfs.append(uid_df)
     uid_dfs = pd.concat(uid_dfs)

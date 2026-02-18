@@ -67,7 +67,7 @@ def extend_doc_list(docs, current, current_id):
     curr_doc = Document(current)
     converted_docs = curr_doc.convert_all()
     curr_doc_text = [s.text for s in curr_doc]
-    docs.append((f'f::{current_id}::-1', curr_doc_text))
+    docs.append((f'f::{current_id}::-1::og', curr_doc_text))
     
     if len(converted_docs) > 0:
         counterf_docs, pass_idxs, conversions = zip(*converted_docs)
@@ -458,6 +458,7 @@ def run_uid_pipeline(
         device=None,
         output_dir=None,
         output_file=None,
+        verbose=False,
         save_every=10
     ):
     print(f"Processing {ud_path}...")
@@ -486,18 +487,28 @@ def run_uid_pipeline(
     rows = []
     
     context_levels = map_context_levels(context_levels)
-    print(f"Docs to process: {len(docs)}")
-    print("Calculating Surprisals...")
+    # print(f"Docs to process: {len(docs)}")
+    docs_pbar = tqdm(
+        total=len(docs),
+        desc="Processing Surprisals",
+        unit="documents",
+        position=0,
+        leave=True
+    )
     doc_idx = 0
     for doc_id, sents in docs:
         sents_pbar = tqdm(
             total=len(sents),
             desc=f"Processing {doc_id}",
             unit="sentences",
-            position=0,
-            leave=True
+            position=1,
+            leave=False
         )
+        fact, doc_name, conv_id, conv_type = doc_id.split("::")
         for i, sent in enumerate(sents):
+            if fact != 'f' and i != int(conv_id):
+                sents_pbar.update(1)
+                continue
             try:
                 for cfg in context_levels:
                     context = build_context(
@@ -509,38 +520,46 @@ def run_uid_pipeline(
                         window=cfg.get("window"),
                         tokenizer=tokenizer,
                     )
-                        tokens, surprisals = compute_surprisal(
-                            sent, context, sents, i, 
-                            tokenizer=tokenizer, model=model, device=device,
-                            uid_level=uid_level
-                        )
-                        surprisals = process_surprisals(tokenizer, tokens, surprisals,
-                                                        uid_unit=uid_unit)
-                        uni_probs, _ = unigram(tokens)
-                        if len(surprisals) < 2:
-                            raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
-                        metrics = uid_metrics(surprisals, uni_probs)
-                        row = {
-                            "doc_id": doc_id,
-                            "sent_idx": i,
-                            "context": cfg["name"],
-                            "sentence": sent,
-                        }
-                        row.update(metrics)
-                        rows.append(row)
+                    tokens, surprisals = compute_surprisal(
+                        sent, context, sents, i, 
+                        tokenizer=tokenizer, model=model, device=device,
+                        uid_level=uid_level
+                    )
+                    surprisals = process_surprisals(tokenizer, tokens, surprisals,
+                                                    uid_unit=uid_unit)
+                    uni_probs, _ = unigram(tokens)
+                    if len(surprisals) < 2:
+                        raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
+                    metrics = uid_metrics(surprisals, uni_probs)
+                    row = {
+                        "doc_id": doc_id,
+                        "sent_idx": i,
+                        "context": cfg["name"],
+                        "sentence": sent,
+                    }
+                    row.update(metrics)
+                    rows.append(row)
             except AssertionError as e:
-                print("Assertion error:", e)
-                print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                if verbose:
+                    print("Assertion error:", e)
+                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
                 continue
             except ValueError as e:
-                print("Value error:", e)
-                print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                if verbose:
+                    print("Value error:", e)
+                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
                 continue
             sents_pbar.update(1)
+            if uid_level == 'document':
+                if verbose:
+                    print("Document-level analyses, skipping remaining sentences")
+                break
         sents_pbar.close()
+        docs_pbar.update(1)
         if doc_idx % save_every == 0:
             temp_df = pd.DataFrame(rows)
-            temp_df.to_csv(output_dir / output_file.stem + "_chkpt.csv")
+            temp_df.to_csv(output_dir / (output_file.stem + "_chkpt.csv"))
+        doc_idx += 1
     print("Done")
     uid_df = pd.DataFrame(rows)
     return uid_df
