@@ -230,7 +230,8 @@ def compute_surprisal(sentence,
                       model,
                       max_len=None,
                       device=None,
-                      uid_level="sentence"):
+                      uid_level="sentence",
+                      verbose=False):
     """Compute the surprisal for the given sentence with a causal LM, given
     context level and uid level.
 
@@ -272,8 +273,9 @@ def compute_surprisal(sentence,
     total_len = len(input_ids[0])
     # print("LENGTHS:", max_len, total_len) # TEMPORARY
     if total_len > max_len:
-        # print(f"WARNING: Input length {total_len} exceeds model context length {max_len}.")
-        # print("Resizing inputs to match...")
+        if verbose:
+            print(f"WARNING: Input length {total_len} exceeds model context length {max_len}.")
+            print("Resizing inputs to match...")
         overflow = total_len - max_len
         if overflow < len(context_ids):
             input_ids = [input_ids[0][overflow:]]
@@ -282,7 +284,8 @@ def compute_surprisal(sentence,
         else:
             input_ids = [input_ids[0][:-overflow]]
             end = min(end, len(input_ids[0]))
-        print(f"New input length: {len(input_ids[0])}")
+        if verbose:
+            print(f"New input length: {len(input_ids[0])}")
         # print(f"New start and end:", start, end) # TEMPORARY
 
     assert len(input_ids[0]) <= max_len, "Input Length Mismatch"
@@ -502,7 +505,7 @@ def run_uid_pipeline(
             desc=f"Processing {doc_id}",
             unit="sentences",
             position=1,
-            leave=False
+            leave=verbose
         )
         fact, doc_name, conv_id, conv_type = doc_id.split("::")
         for i, sent in enumerate(sents):
@@ -523,7 +526,8 @@ def run_uid_pipeline(
                     tokens, surprisals = compute_surprisal(
                         sent, context, sents, i, 
                         tokenizer=tokenizer, model=model, device=device,
-                        uid_level=uid_level
+                        uid_level=uid_level,
+                        verbose=verbose
                     )
                     surprisals = process_surprisals(tokenizer, tokens, surprisals,
                                                     uid_unit=uid_unit)
