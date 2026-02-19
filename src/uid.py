@@ -358,6 +358,7 @@ def uid_metrics(surprisals,
     slope = np.polyfit(x, arr, 1)[0] if len(arr) > 1 else 0.0
 
     return {
+        "raw_surps": list(surprisals),
         "surp_mean": mean,
         "surp_slor": slor,
         "uid_std": std,
