@@ -348,7 +348,7 @@ def uid_metrics(surprisals,
     uni_arr = np.array(uni_probs)
     uni_arr = -np.log(uni_arr + 1e-5) / np.log(2) # probs -> surps
     mean = arr.mean()
-    slor = (uni_arr.sum() - arr.sum()) / len(arr)
+    slor = (uni_arr.sum() - arr.sum()) / len(arr) # back to logprobs
     std = arr.std()
     mad = np.mean(np.abs(arr - mean))
     pwd = (np.diff(arr) ** 2).mean()
@@ -359,6 +359,7 @@ def uid_metrics(surprisals,
 
     return {
         "raw_surps": list(surprisals),
+        "raw_uni_surps": list(uni_arr),
         "surp_mean": mean,
         "surp_slor": slor,
         "uid_std": std,
