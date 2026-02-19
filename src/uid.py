@@ -271,7 +271,6 @@ def compute_surprisal(sentence,
     # Deal with overflow + length
     max_len = max_len or getattr(tokenizer, "model_max_length", 1024)
     total_len = len(input_ids[0])
-    # print("LENGTHS:", max_len, total_len) # TEMPORARY
     if total_len > max_len:
         if verbose:
             print(f"WARNING: Input length {total_len} exceeds model context length {max_len}.")
@@ -286,7 +285,6 @@ def compute_surprisal(sentence,
             end = min(end, len(input_ids[0]))
         if verbose:
             print(f"New input length: {len(input_ids[0])}")
-        # print(f"New start and end:", start, end) # TEMPORARY
 
     assert len(input_ids[0]) <= max_len, "Input Length Mismatch"
     # run through model
@@ -308,9 +306,7 @@ def compute_surprisal(sentence,
             continue
 
     # re-code tokens
-    # print("Process tokens IDS:", len(input_ids[0])) # TEMPORARY
     tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
-    # print("Tokens length:", len(tokens)) # TEMPORARY
     sent_tokens = tokens[start:end]
     
     return sent_tokens, surprisals
@@ -321,9 +317,9 @@ def get_input_start_end(sent_ids,
                         uid_level,
                         sent_idx):
     if uid_level == "sentence":
-        input_ids = torch.tensor([context_ids + sent_ids])
+        input_ids = [context_ids + sent_ids]
         start = len(context_ids)
-        end = input_ids.size(1)
+        end = len(input_ids[0])
     elif uid_level == "document":
         input_ids = [[id for sent in doc_ids for id in sent]]
         start = 0
@@ -478,7 +474,6 @@ def run_uid_pipeline(
     if generate_counterfactual:
         print("Generating counterfactual documents...", end="")
         docs = iter_counterfactual_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
-        # docs = docs[11:] # TEMPORARY
         print(" Done")
     else:
         docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
@@ -561,6 +556,8 @@ def run_uid_pipeline(
         sents_pbar.close()
         docs_pbar.update(1)
         if doc_idx % save_every == 0:
+            if verbose:
+                print(f"Saving checkpoint at {doc_idx + 1} document(s)...")
             temp_df = pd.DataFrame(rows)
             temp_df.to_csv(output_dir / (output_file.stem + "_chkpt.csv"))
         doc_idx += 1
