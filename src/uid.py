@@ -326,9 +326,11 @@ def get_input_start_end(sent_ids,
         end = len(input_ids[0])
     elif key := re.search(r"[\(\[]\-(\d+)\, *\+(\d+)[\)\]]", uid_level):
         before, after = key.groups()
+        before = int(before)
+        after = int(after)
         if before > len(context_ids):
             raise ValueError("Left uid calculation window cannot extend past context.")
-        right = [id for id in sent for sent in doc_ids[sent_idx+1:]]
+        right = [id for sent in doc_ids[sent_idx+1:] for id in sent]
         input_ids = [context_ids + sent_ids + right[:after]]
         start = len(context_ids) - before
         end = len(input_ids[0])
@@ -400,6 +402,7 @@ def process_surprisals(tokenizer,
     TODO: Should we split by sentence in compute_surprisal before returning to make this cleaner?
     * Either way, we have to combine together to feed into model then split again
     """
+    assert len(tokens) == len(surprisals), f"Dimension mismatch between inputs: surprisals ({len(surprisals)}) and tokens ({len(tokens)})"
     # skip if token-level
     if uid_unit == "token":
         return surprisals
@@ -411,7 +414,7 @@ def process_surprisals(tokenizer,
     sentence_token_ids = [tokenizer.encode(sent, add_special_tokens=False)
                             for sent in sentences]
     sentence_token_ids_len = sum(len(sent) for sent in sentence_token_ids)
-    assert sentence_token_ids_len == len(surprisals), f"Dimension mismatch between surprisals ({len(surprisals)}) and tokens ({sentence_token_ids_len})"
+    assert sentence_token_ids_len == len(surprisals), f"Dimension mismatch between surprisals ({len(surprisals)}) and tokens ({sentence_token_ids_len}): input = {tokens}, token_ids = {sentence_token_ids}"
     
     # calculate uid units
     if uid_unit == "word":
@@ -507,8 +510,8 @@ def run_uid_pipeline(
             if fact != 'f' and i != int(conv_id):
                 sents_pbar.update(1)
                 continue
-            try:
-                for cfg in context_levels:
+            for cfg in context_levels:
+                try:
                     context = build_context(
                         sents,
                         i,
@@ -538,16 +541,16 @@ def run_uid_pipeline(
                     }
                     row.update(metrics)
                     rows.append(row)
-            except AssertionError as e:
-                if verbose:
-                    print("Assertion error:", e)
-                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
-                continue
-            except ValueError as e:
-                if verbose:
-                    print("Value error:", e)
-                    print(f"Skipping {doc_id} sentence {i} for context {cfg}")
-                continue
+                except AssertionError as e:
+                    if verbose:
+                        print("Assertion error:", e)
+                        print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                    continue
+                except ValueError as e:
+                    if verbose:
+                        print("Value error:", e)
+                        print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                    continue
             sents_pbar.update(1)
             if uid_level == 'document':
                 if verbose:
