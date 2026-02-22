@@ -57,3 +57,7 @@ In our implementation, we extend `conllu.Token` to include a list of the childre
 
 `src/unigram.py` defines a simple unigram model for use in experiments.
 A demo of this model's use can be found in `notebooks/UID.ipynb`.
+
+### Surprisal Visualization
+
+`src/utils.py` includes `plot_token_surprisal(tokens, surprisals, ...)` for quick token-by-token surprisal plots.
