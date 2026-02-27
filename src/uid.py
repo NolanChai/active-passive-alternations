@@ -109,11 +109,14 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
     
 
 
-def load_lm(model_name="distilgpt2", device=None):
+def load_lm(model_name="distilgpt2", device=None, dtype=None):
     # note - using distilgpt for fast prototyping, use gpt-2 for final
     assert device is not None, "Please specify device."
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    load_kwargs = {}
+    if dtype is not None:
+        load_kwargs["torch_dtype"] = dtype
+    model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
 
     if tokenizer.bos_token_id is None:
         tokenizer.bos_token = tokenizer.eos_token
@@ -470,7 +473,9 @@ def run_uid_pipeline(
         output_dir=None,
         output_file=None,
         verbose=False,
-        save_every=10
+        save_every=10,
+        fast=False,
+        batch_size=32,
     ):
     print(f"Processing {ud_path}...")
     # Set up device
@@ -489,7 +494,17 @@ def run_uid_pipeline(
         print(" Done")
     else:
         docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
-    tokenizer, model, device = load_lm(model_name=model_name, device=device)
+    if fast:
+        from src.fast_surprisal import compute_surprisal_fast
+        compute_fn = compute_surprisal_fast
+        # Load with bf16 on CUDA for weight-level savings (optional but harmless)
+        lm_dtype = torch.bfloat16 if (torch.cuda.is_available() and
+                                       torch.cuda.is_bf16_supported()) else None
+        tokenizer, model, device = load_lm(model_name=model_name, device=device,
+                                           dtype=lm_dtype)
+    else:
+        compute_fn = compute_surprisal
+        tokenizer, model, device = load_lm(model_name=model_name, device=device)
     docs_text = "\n".join(["\n".join(doc[1]) for doc in docs])
     unigram = UnigramLM(tokenizer)
     unigram.fit(docs_text, uid_unit=uid_unit)
@@ -530,8 +545,8 @@ def run_uid_pipeline(
                         window=cfg.get("window"),
                         tokenizer=tokenizer,
                     )
-                    tokens, surprisals = compute_surprisal(
-                        sent, context, sents, i, 
+                    tokens, surprisals = compute_fn(
+                        sent, context, sents, i,
                         tokenizer=tokenizer, model=model, device=device,
                         uid_level=uid_level,
                         verbose=verbose

@@ -16,5 +16,8 @@ wheels/
 data/*
 *.conllu
 
+# Outputs
+outputs/*
+
 # Kubernetes yaml files
 *.yaml
