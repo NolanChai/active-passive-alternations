@@ -138,20 +138,30 @@ def main():
                 print(f"  uid_level={ul}: no parseable raw_surps rows.")
                 continue
 
-            # Estimate baseline sentence length (uid_level="sentence" rows, same doc)
-            # Fall back to uid_len column if available
-            if "uid_len" in df.columns:
-                baseline = df[df["uid_level"] == ul]["uid_len"].median()
+            # Use (-0,+0) rows as baseline; fallback to heuristic if absent.
+            zero_mask = df["uid_level"].isin(["(-0,+0)", "(-0, +0)"])
+            zero_parsed = parsed.loc[df[zero_mask].index].dropna()
+            if len(zero_parsed) > 0:
+                baseline = zero_parsed.map(len).median()
+                baseline_src = "(-0,+0) rows"
             else:
-                baseline = subset_parsed.map(len).median() * 0.5  # rough heuristic
+                baseline = None
 
             lengths_sub = subset_parsed.map(len)
-            frac_extended = (lengths_sub > baseline).mean()
             print(f"  uid_level={ul}: {len(subset)} rows, "
-                  f"{frac_extended*100:.1f}% have len(raw_surps) > baseline ({baseline:.0f})")
-            if frac_extended < 0.5:
-                print(f"    WARNING: fewer than 50% of rows show extended context. "
-                      f"Is '--context document' being used?")
+                  f"len(raw_surps) mean={lengths_sub.mean():.1f} "
+                  f"p25={lengths_sub.quantile(0.25):.0f} "
+                  f"p75={lengths_sub.quantile(0.75):.0f}")
+            if baseline is not None:
+                frac_extended = (lengths_sub > baseline).mean()
+                print(f"    {frac_extended*100:.1f}% have len > baseline={baseline:.0f} "
+                      f"(from {baseline_src})")
+                if frac_extended < 0.5:
+                    print(f"    WARNING: fewer than 50% of rows show extended context. "
+                          f"Is '--context document' being used?")
+            else:
+                print(f"    (No (-0,+0) rows in this CSV — add window (-0,+0) to sweep "
+                      f"to verify context coverage)")
         print()
 
     # ------------------------------------------------------------------
@@ -184,18 +194,29 @@ def main():
         print("  No counterfactual rows found. Run with --generate_counterfactual.")
         return
 
-    # Build factual key set
-    match_cols = ["doc_name", "conv_id"]
-    opt_cols = [c for c in ["context", "uid_unit"] if c in df2.columns]
-    match_cols += opt_cols
+    # Factual doc_id has conv_id="-1" (not a sentence index), so we cannot
+    # match CF rows directly by conv_id.  Instead, match CF conv_id (= sent_idx
+    # of the source sentence) against the factual row's sent_idx column.
+    opt_cols = [c for c in ["uid_level", "context", "uid_unit"] if c in df2.columns]
 
-    factual_keys = set(
-        zip(*[factual[c] for c in match_cols])
-    )
+    if "sent_idx" in df2.columns:
+        def _key(doc_name, idx, row):
+            return (str(doc_name), str(int(float(idx)))) + tuple(row[c] for c in opt_cols)
 
-    def has_match(row):
-        key = tuple(row[c] for c in match_cols)
-        return key in factual_keys
+        factual_keys = set(
+            _key(r["doc_name"], r["sent_idx"], r) for _, r in factual.iterrows()
+        )
+
+        def has_match(row):
+            return _key(row["doc_name"], row["conv_id"], row) in factual_keys
+    else:
+        # Fallback: match on conv_id directly (will likely produce 0% for this corpus)
+        match_cols = ["doc_name", "conv_id"] + opt_cols
+        factual_keys = set(zip(*[factual[c] for c in match_cols]))
+
+        def has_match(row):
+            key = tuple(row[c] for c in match_cols)
+            return key in factual_keys
 
     cf_matched = counterfactual.apply(has_match, axis=1).sum()
     pct = cf_matched / len(counterfactual) * 100
@@ -205,6 +226,7 @@ def main():
     if pct < 50:
         print("  WARNING: <50% pairing. Possible causes:")
         print("    - Factual docs were filtered differently from CF docs")
+        print("    - sent_idx column absent (old CSV — re-run pipeline)")
         print("    - doc_id conv_id mismatch (check passivization logic)")
 
     # Per conv_type breakdown

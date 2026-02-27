@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Set verbosity")
     parser.add_argument("--fast", action="store_true", help="Use fast bf16/TF32 vectorized surprisal backend (recommended on A100)")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for fast backend (default: 32; use 128 on A100)")
+    parser.add_argument("--sent_offset", type=int, default=0, help="Sentence offset for next-sentence analysis: 0=score converted sentence (default), 1=score s_{t+1}, 2=score s_{t+2}, etc.")
     
     args, unk = parser.parse_known_args()
     
@@ -70,6 +71,7 @@ def main():
             verbose=args.verbose,
             fast=args.fast,
             batch_size=args.batch_size,
+            sent_offset=args.sent_offset,
         )
         uid_dfs.append(uid_df)
     uid_dfs = pd.concat(uid_dfs)

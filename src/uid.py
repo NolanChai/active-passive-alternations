@@ -489,6 +489,7 @@ def run_uid_pipeline(
         save_every=10,
         fast=False,
         batch_size=32,
+        sent_offset=0,
     ):
     print(f"Processing {ud_path}...")
     # Set up device
@@ -543,8 +544,11 @@ def run_uid_pipeline(
             leave=verbose
         )
         fact, doc_name, conv_id, conv_type = doc_id.split("::")
+        target_sent_idx = int(conv_id) + sent_offset if fact == 'cf' else None
         for i, sent in enumerate(sents):
-            if fact != 'f' and i != int(conv_id):
+            # For CF docs: only score the target sentence (source + offset).
+            # sent_offset=0 → score converted sentence; =1 → score s_{t+1}, etc.
+            if fact == 'cf' and i != target_sent_idx:
                 sents_pbar.update(1)
                 continue
             for cfg in context_levels:
@@ -570,8 +574,15 @@ def run_uid_pipeline(
                     if len(surprisals) < 2:
                         raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
                     metrics = uid_metrics(surprisals, uni_probs)
+                    # When sent_offset > 0 the CF row targets s_{t+offset}, not
+                    # s_t itself.  Rewrite doc_id so conv_id reflects the target
+                    # sentence index (enabling pairing with factual sent_idx=i).
+                    if fact == 'cf' and sent_offset != 0:
+                        emit_doc_id = f"cf::{doc_name}::{i}::{conv_type}"
+                    else:
+                        emit_doc_id = doc_id
                     row = {
-                        "doc_id": doc_id,
+                        "doc_id": emit_doc_id,
                         "sent_idx": i,
                         "context": cfg["name"],
                         "uid_level": uid_level,
@@ -580,6 +591,8 @@ def run_uid_pipeline(
                         "tokens": tokens,
                         "units": units,
                     }
+                    if fact == 'cf' and sent_offset != 0:
+                        row["source_sent_idx"] = int(conv_id)
                     row.update(metrics)
                     rows.append(row)
                 except AssertionError as e:
