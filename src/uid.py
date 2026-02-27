@@ -82,6 +82,7 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
     docs = []
     current_id = None
     current = []
+    skip_doc = False  # True after limit_sents_per_doc truncation; reset on next newdoc
 
     with open(path, "r", encoding="utf-8") as f:
         for sent in parse_incr(f):
@@ -93,6 +94,10 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
                         return docs
                 current_id = meta["newdoc id"]
                 current = []
+                skip_doc = False
+
+            if skip_doc:
+                continue
 
             current.append(sent)
             if limit_sents_per_doc and len(current) >= limit_sents_per_doc:
@@ -101,6 +106,7 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
                 if limit_docs and len(docs) >= limit_docs:
                     return docs
                 current = []
+                skip_doc = True  # discard remainder of this document
 
         if current:
             extend_doc_list(docs, current, current_id)
