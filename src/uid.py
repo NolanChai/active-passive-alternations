@@ -121,7 +121,7 @@ def load_lm(model_name="distilgpt2", device=None, dtype=None):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     load_kwargs = {}
     if dtype is not None:
-        load_kwargs["torch_dtype"] = dtype
+        load_kwargs["dtype"] = dtype
     model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
 
     if tokenizer.bos_token_id is None:
@@ -386,7 +386,7 @@ def map_context_levels(levels):
             "prev1": {"name": "prev1", "mode": "prev", "k": 1},
             "prev3": {"name": "prev3", "mode": "prev", "k": 3},
             "document": {"name": "document", "mode": "doc"},
-            
+
             # sent[-L,+R] = sentence window with L sentences before, R after
             # tok[-L,+R]  = token window with L tokens before, R after
             "sent[-2,+0]": {"name": "sent[-2,+0]", "mode": "window", "window": {"type": "sent", "side": "left", "size": 2}},
@@ -396,6 +396,9 @@ def map_context_levels(levels):
         }
         if levels is None:
             return list(context_mapping.values())
+        # Accept a bare string (e.g. "--context document") as well as a list
+        if isinstance(levels, str):
+            levels = [levels]
         return [context_mapping[level] for level in levels]
 
 def process_surprisals(tokenizer,
@@ -567,6 +570,8 @@ def run_uid_pipeline(
                         "doc_id": doc_id,
                         "sent_idx": i,
                         "context": cfg["name"],
+                        "uid_level": uid_level,
+                        "uid_unit": uid_unit,
                         "sentence": sent,
                         "tokens": tokens,
                         "units": units,
