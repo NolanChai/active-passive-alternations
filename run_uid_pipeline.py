@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--output_dir", type=str, default=None, help="(Optional) Output directory")
     parser.add_argument("--output_name", type=str, default="passives_uid_calcs.csv", help="(Optional) Name of output file")
     parser.add_argument("--verbose", action="store_true", help="Set verbosity")
+    parser.add_argument("--fast", action="store_true", help="Use fast bf16/TF32 vectorized surprisal backend (recommended on A100)")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for fast backend (default: 32; use 128 on A100)")
     
     args, unk = parser.parse_known_args()
     
@@ -65,7 +67,9 @@ def main():
             device=args.device,
             output_dir=output_dir,
             output_file=output_file,
-            verbose=args.verbose
+            verbose=args.verbose,
+            fast=args.fast,
+            batch_size=args.batch_size,
         )
         uid_dfs.append(uid_df)
     uid_dfs = pd.concat(uid_dfs)
