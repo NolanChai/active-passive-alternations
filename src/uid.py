@@ -341,7 +341,9 @@ def get_input_start_end(sent_ids,
             raise ValueError("Left uid calculation window cannot extend past context.")
         right = [id for sent in doc_ids[sent_idx+1:] for id in sent]
         input_ids = [context_ids + sent_ids + right[:after]]
-        start = len(context_ids) - before
+        # Clamp to 1: position 0 is always BOS; log_probs[0, -1, :] wraps
+        # incorrectly in vectorised indexing when before == len(context_ids).
+        start = max(1, len(context_ids) - before)
         end = len(input_ids[0])
     else:
         raise ValueError(f"UID Level {uid_level} not supported.")
