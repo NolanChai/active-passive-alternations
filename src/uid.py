@@ -322,7 +322,7 @@ def get_input_start_end(sent_ids,
         end = len(input_ids[0])
     elif uid_level == "document":
         input_ids = [[id for sent in doc_ids for id in sent]]
-        start = 0
+        start = 1
         end = len(input_ids[0])
     elif key := re.search(r"[\(\[]\-(\d+)\, *\+(\d+)[\)\]]", uid_level):
         before, after = key.groups()
@@ -407,9 +407,10 @@ def process_surprisals(tokenizer,
     assert len(tokens) == len(surprisals), f"Dimension mismatch between inputs: surprisals ({len(surprisals)}) and tokens ({len(tokens)})"
     # skip if token-level
     if uid_unit == "token":
-        return surprisals
+        return surprisals, tokens
 
     result_surprisals = []
+    result_units = []
     # decode and split text by sentence
     text = tokenizer.convert_tokens_to_string(tokens)
     sentences = [sent.text for sent in nlp(text).sentences]
@@ -431,13 +432,18 @@ def process_surprisals(tokenizer,
                 if tok in tokenizer.all_special_tokens:
                     continue
                 elif tok.startswith("Ġ") or tok.startswith("_"):
-                    result_surprisals.append(curr_surprisal)
+                    if curr_surprisal:
+                        result_surprisals.append(curr_surprisal)
+                    if curr_word:
+                        result_units.append(curr_word)
                     curr_surprisal = surp
                     curr_word = tok
                 else:
                     curr_surprisal += surp
                     curr_word += tok
-            result_surprisals.append(curr_surprisal)
+            if curr_word:
+                result_surprisals.append(curr_surprisal)
+                result_units.append(curr_word)
             curr_idx += sent_length
     elif uid_unit == "sentence":
         # loop through surprisals and add by sentence
@@ -446,9 +452,10 @@ def process_surprisals(tokenizer,
             sent_surprisals = surprisals[surp_idx:surp_idx + len(sent_tokens)]
             surp_idx += len(sent_tokens)
             result_surprisals.append(sum(sent_surprisals))
+        result_units = sentences
     else:
         raise ValueError(f"UID Unit {uid_unit} not supported.")
-    return result_surprisals
+    return result_surprisals, result_units
 
 def run_uid_pipeline(
         ud_path,
@@ -529,7 +536,7 @@ def run_uid_pipeline(
                         uid_level=uid_level,
                         verbose=verbose
                     )
-                    surprisals = process_surprisals(tokenizer, tokens, surprisals,
+                    surprisals, units = process_surprisals(tokenizer, tokens, surprisals,
                                                     uid_unit=uid_unit)
                     uni_probs, _ = unigram(tokens)
                     if len(surprisals) < 2:
@@ -540,6 +547,8 @@ def run_uid_pipeline(
                         "sent_idx": i,
                         "context": cfg["name"],
                         "sentence": sent,
+                        "tokens": tokens,
+                        "units": units,
                     }
                     row.update(metrics)
                     rows.append(row)
