@@ -14,17 +14,13 @@ This guide shows how to run windowed UID analysis on Google Colab (A100 GPU).
 
 ## 2. Clone + install
 
-```bash
-# Install uv (fast Python package manager)
-pip install uv -q
-
-# Clone repo and switch to the experiment branch
-git clone https://github.com/YOUR_USERNAME/active-passive-alternations.git
-cd active-passive-alternations
-git checkout colab-monorepo
-
-# Install all dependencies
-uv sync
+```python
+# In a Colab code cell:
+!pip install uv -q
+!git clone https://github.com/NolanChai/active-passive-alternations.git /content/repo
+%cd /content/repo
+!git checkout colab-monorepo
+!uv sync   # uv downloads Python 3.13 if needed (~1 min first time)
 ```
 
 ---
