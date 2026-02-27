@@ -15,10 +15,13 @@ Example (A100):
       --limit_docs 50 --limit_sents_per_doc 12
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import argparse
 import re
 import warnings
-from pathlib import Path
 
 import pandas as pd
 

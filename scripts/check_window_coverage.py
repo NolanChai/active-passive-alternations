@@ -11,12 +11,14 @@ Usage:
   uv run python scripts/check_window_coverage.py --csv outputs/window_uid_tok10.csv
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import argparse
 import ast
 import json
 import re
-import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
