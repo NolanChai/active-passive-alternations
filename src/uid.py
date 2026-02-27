@@ -305,7 +305,9 @@ def compute_surprisal(sentence,
     surprisals = []
 
     # compute surprisals
-    for i in range(start, end):
+    # i-1 must be >= 0; start is clamped to 1 in get_input_start_end for all
+    # uid_levels so this is always safe, but guard explicitly just in case.
+    for i in range(max(1, start), end):
         try:
             token_id = input_ids[0, i]
             lp = log_probs[0, i - 1, token_id]
@@ -331,7 +333,7 @@ def get_input_start_end(sent_ids,
         end = len(input_ids[0])
     elif uid_level == "document":
         input_ids = [[id for sent in doc_ids for id in sent]]
-        start = 0
+        start = 1  # position 0 has no preceding token; log_probs[0,-1,:] wraps incorrectly
         end = len(input_ids[0])
     elif key := re.search(r"[\(\[]\-(\d+)\, *\+(\d+)[\)\]]", uid_level):
         before, after = key.groups()
