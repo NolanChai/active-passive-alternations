@@ -322,7 +322,7 @@ def get_input_start_end(sent_ids,
         end = len(input_ids[0])
     elif uid_level == "document":
         input_ids = [[id for sent in doc_ids for id in sent]]
-        start = 0
+        start = 1
         end = len(input_ids[0])
     elif key := re.search(r"[\(\[]\-(\d+)\, *\+(\d+)[\)\]]", uid_level):
         before, after = key.groups()
