@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--fast", action="store_true", help="Use fast bf16/TF32 vectorized surprisal backend (recommended on A100)")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for fast backend (default: 32; use 128 on A100)")
     parser.add_argument("--sent_offset", type=int, default=0, help="Sentence offset for next-sentence analysis: 0=score converted sentence (default), 1=score s_{t+1}, 2=score s_{t+2}, etc.")
+    parser.add_argument("--score_all_cf_sents", action="store_true", help="Score every sentence in CF documents (not just the converted one). Enables full document trajectory comparison.")
     
     args, unk = parser.parse_known_args()
     
@@ -48,7 +49,7 @@ def main():
                 extra_args[key] = value
 
     # Paths
-    UD_paths = Path(args.data_dir).iterdir()
+    UD_paths = Path(args.data_dir).glob("*.conllu")
     output_dir = Path(args.output_dir)
     output_file = Path(args.output_name).with_suffix(".csv")
     output_filepath = output_dir / output_file
@@ -72,6 +73,7 @@ def main():
             fast=args.fast,
             batch_size=args.batch_size,
             sent_offset=args.sent_offset,
+            score_all_cf_sents=args.score_all_cf_sents,
         )
         uid_dfs.append(uid_df)
     uid_dfs = pd.concat(uid_dfs)

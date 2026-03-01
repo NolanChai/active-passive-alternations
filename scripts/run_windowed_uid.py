@@ -61,6 +61,8 @@ def main():
                         help="Use fast bf16/TF32 backend (recommended on A100).")
     parser.add_argument("--batch_size", type=int, default=32,
                         help="Batch size for fast backend (default: 32; use 128 on A100).")
+    parser.add_argument("--score_all_cf_sents", action="store_true",
+                        help="Score every sentence in CF documents for full trajectory analysis.")
 
     args, unk = parser.parse_known_args()
     extra_args = {}
@@ -80,7 +82,7 @@ def main():
 
     from src.uid import run_uid_pipeline
 
-    UD_paths = list(Path(args.data_dir).iterdir())
+    UD_paths = list(Path(args.data_dir).glob("*.conllu"))
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = Path(args.output_name).with_suffix(".csv")
@@ -103,6 +105,7 @@ def main():
             verbose=args.verbose,
             fast=args.fast,
             batch_size=args.batch_size,
+            score_all_cf_sents=args.score_all_cf_sents,
         )
         uid_dfs.append(uid_df)
 

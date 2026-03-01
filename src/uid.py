@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 
 import numpy as np
+from scipy.stats import skew as _skew
 import pandas as pd
 import torch
 from conllu import parse, parse_incr
@@ -352,34 +353,72 @@ def get_input_start_end(sent_ids,
         
     return input_ids, start, end
     
-# Really basic UID metrics
-def uid_metrics(surprisals, 
-                uni_probs):
+def _gini(arr):
+    """Gini coefficient of arr (0 = perfectly uniform, 1 = all in one element)."""
+    n = len(arr)
+    if n < 2 or arr.sum() == 0:
+        return 0.0
+    sorted_arr = np.sort(arr)
+    idx = np.arange(1, n + 1)
+    return float((2.0 * (idx * sorted_arr).sum()) / (n * sorted_arr.sum()) - (n + 1) / n)
+
+
+def uid_metrics(surprisals, uni_probs):
     if not surprisals:
         return {}
     arr = np.array(surprisals)
     uni_arr = np.array(uni_probs)
-    uni_arr = -np.log(uni_arr + 1e-5) / np.log(2) # probs -> surps
+    uni_arr = -np.log(uni_arr + 1e-5) / np.log(2)  # probs -> surps (bits)
+
     mean = arr.mean()
-    slor = (uni_arr.sum() - arr.sum()) / len(arr) # back to logprobs
+    slor = (uni_arr.sum() - arr.sum()) / len(arr)
     std = arr.std()
     mad = np.mean(np.abs(arr - mean))
-    pwd = (np.diff(arr) ** 2).mean()
+    pwd = (np.diff(arr) ** 2).mean() if len(arr) > 1 else 0.0
     rng = arr.max() - arr.min()
 
     x = np.arange(len(arr))
-    slope = np.polyfit(x, arr, 1)[0] if len(arr) > 1 else 0.0
+    slope = float(np.polyfit(x, arr, 1)[0]) if len(arr) > 1 else 0.0
+
+    # --- new metrics ---
+    # Peak surprisal: absolute worst-case UID violation in the sentence.
+    # Distinct from uid_range (which is max-min): a uniformly high sentence
+    # can have range≈0 but surp_peak >> 0.
+    surp_peak = float(arr.max())
+
+    # Robust spread: IQR is resistant to single outlier words that inflate
+    # uid_std and uid_range.
+    uid_iqr = float(np.percentile(arr, 75) - np.percentile(arr, 25))
+
+    # Distribution skewness: positive = a few very hard words pull the tail
+    # right. UID theory predicts near-zero skew (flat distribution).
+    uid_skew = float(_skew(arr)) if len(arr) >= 3 and arr.std() > 1e-10 else 0.0
+
+    # Gini coefficient: the single cleanest UID uniformity index.
+    # 0 = every word equally surprising (ideal UID), 1 = all surprisal in
+    # one word.  More interpretable than uid_cv for this purpose.
+    uid_gini = _gini(arr)
+
+    # Local roughness: mean |diff| — the unsquared analogue of uid_pwd.
+    # uid_pwd (mean squared diff) quadratically amplifies large jumps; this
+    # version weighs all consecutive changes equally.
+    uid_roughness = float(np.abs(np.diff(arr)).mean()) if len(arr) > 1 else 0.0
 
     return {
         "raw_surps": list(surprisals),
         "raw_uni_surps": list(uni_arr),
         "surp_mean": mean,
+        "surp_peak": surp_peak,
         "surp_slor": slor,
         "uid_std": std,
         "uid_mad": mad,
+        "uid_iqr": uid_iqr,
         "uid_pwd": pwd,
+        "uid_roughness": uid_roughness,
         "uid_range": rng,
         "uid_cv": std / mean if mean > 0 else 0.0,
+        "uid_skew": uid_skew,
+        "uid_gini": uid_gini,
         "uid_slope": slope,
         "uid_len": len(arr),
     }
@@ -490,6 +529,7 @@ def run_uid_pipeline(
         fast=False,
         batch_size=32,
         sent_offset=0,
+        score_all_cf_sents=False,
     ):
     print(f"Processing {ud_path}...")
     # Set up device
@@ -546,9 +586,9 @@ def run_uid_pipeline(
         fact, doc_name, conv_id, conv_type = doc_id.split("::")
         target_sent_idx = int(conv_id) + sent_offset if fact == 'cf' else None
         for i, sent in enumerate(sents):
-            # For CF docs: only score the target sentence (source + offset).
-            # sent_offset=0 → score converted sentence; =1 → score s_{t+1}, etc.
-            if fact == 'cf' and i != target_sent_idx:
+            # For CF docs: skip sentences that aren't the target, unless
+            # score_all_cf_sents=True (full trajectory mode).
+            if fact == 'cf' and not score_all_cf_sents and i != target_sent_idx:
                 sents_pbar.update(1)
                 continue
             for cfg in context_levels:
