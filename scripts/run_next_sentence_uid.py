@@ -97,7 +97,7 @@ def main():
 
     from src.uid import run_uid_pipeline
 
-    UD_paths = list(Path(args.data_dir).iterdir())
+    UD_paths = list(Path(args.data_dir).glob("*.conllu"))
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = Path(args.output_name).with_suffix(".csv")

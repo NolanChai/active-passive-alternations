@@ -426,15 +426,30 @@ def uid_metrics(surprisals, uni_probs):
 def map_context_levels(levels):
         context_mapping = {
             "sentence": {"name": "sentence", "mode": "none"},
+            # "no_ctx" is an alias for "sentence" with a name that reads clearly
+            # in sweep CSVs where the context column encodes conditioning amount.
+            "no_ctx":   {"name": "no_ctx",   "mode": "none"},
             "prev1": {"name": "prev1", "mode": "prev", "k": 1},
             "prev3": {"name": "prev3", "mode": "prev", "k": 3},
             "document": {"name": "document", "mode": "doc"},
 
             # sent[-L,+R] = sentence window with L sentences before, R after
             # tok[-L,+R]  = token window with L tokens before, R after
+            "sent[-1,+0]":  {"name": "sent[-1,+0]",  "mode": "prev", "k": 1},
+            "sent[-3,+0]":  {"name": "sent[-3,+0]",  "mode": "prev", "k": 3},
+            "sent[-5,+0]":  {"name": "sent[-5,+0]",  "mode": "prev", "k": 5},
+            "sent[-10,+0]": {"name": "sent[-10,+0]", "mode": "prev", "k": 10},
             "sent[-2,+0]": {"name": "sent[-2,+0]", "mode": "window", "window": {"type": "sent", "side": "left", "size": 2}},
             "sent[-2,+2]": {"name": "sent[-2,+2]", "mode": "window", "window": {"type": "sent", "side": "both", "size": 2}},
-            "tok[-64,+0]": {"name": "tok[-64,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 64}},
+
+            # Left-only token context levels — for the context sweep experiment.
+            # Conditioning context only; scored tokens are controlled by uid_level.
+            "tok[-10,+0]":  {"name": "tok[-10,+0]",  "mode": "window", "window": {"type": "token", "side": "left", "size": 10}},
+            "tok[-20,+0]":  {"name": "tok[-20,+0]",  "mode": "window", "window": {"type": "token", "side": "left", "size": 20}},
+            "tok[-50,+0]":  {"name": "tok[-50,+0]",  "mode": "window", "window": {"type": "token", "side": "left", "size": 50}},
+            "tok[-100,+0]": {"name": "tok[-100,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 100}},
+            "tok[-200,+0]": {"name": "tok[-200,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 200}},
+            "tok[-64,+0]":  {"name": "tok[-64,+0]",  "mode": "window", "window": {"type": "token", "side": "left", "size": 64}},
             "tok[-64,+64]": {"name": "tok[-64,+64]", "mode": "window", "window": {"type": "token", "side": "both", "size": 64}},
         }
         if levels is None:
