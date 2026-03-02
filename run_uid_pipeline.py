@@ -11,7 +11,7 @@ def main():
     # Required
     parser = argparse.ArgumentParser(description='Run Active/Passive switch script and UID calculation scripts on a given UD corpus.')
     parser.add_argument("data_dir", type=str, help="Path to folder containing .conllu files to process.")
-    parser.add_argument("model",type=str, help="Model to use for surprisal calculations.")
+    parser.add_argument("model", type=str, nargs="?", default="distilgpt2", help="Model to use for surprisal calculations (default: distilgpt2).")
     # Optional
     parser.add_argument("--context", "-c", type=str, default=None, help="(Optional) The context level for UID calculation. Choose between sentence, prev1, prev3, document, sent[-2,+0], sent[-2,+2], tok[-64,+0], or tok[-64,+64]. Defaults to all.")
     parser.add_argument("--generate_counterfactual", "-cf", action="store_true", help="Include to generate counterfactual documents to compare to.")    

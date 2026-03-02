@@ -8,7 +8,7 @@ Same flags as run_uid_pipeline.py but with windowed-uid-friendly defaults:
   --output_name → "window_uid.csv"
 
 Example (A100):
-  uv run python scripts/run_windowed_uid.py data/ gpt2 \
+  uv run python scripts/run_windowed_uid.py data/ \
       --context document --uid_unit token --uid_level "(-10,+10)" \
       --generate_counterfactual --fast --batch_size 128 \
       --output_dir outputs --output_name window_uid_tok10.csv \
@@ -35,8 +35,8 @@ def main():
     # Required
     parser.add_argument("data_dir", type=str,
                         help="Path to folder containing .conllu files.")
-    parser.add_argument("model", type=str,
-                        help="HuggingFace model name (e.g. gpt2, distilgpt2).")
+    parser.add_argument("model", type=str, nargs="?", default="distilgpt2",
+                        help="HuggingFace model name (default: distilgpt2).")
     # Optional — same as run_uid_pipeline.py, with windowed defaults
     parser.add_argument("--context", "-c", type=str, default=None,
                         help="Context level. Default: all. Common: document.")

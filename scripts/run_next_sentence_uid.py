@@ -15,7 +15,7 @@ full document with one sentence converted, so s_{t+1} is already present.
 --sent_offset controls how many sentences ahead to score (default: 1).
 
 Example (A100):
-  uv run python scripts/run_next_sentence_uid.py data/ gpt2 \\
+  uv run python scripts/run_next_sentence_uid.py data/ \\
       --context document \\
       --uid_unit word \\
       --uid_level sentence \\
@@ -46,8 +46,8 @@ def main():
     # Required
     parser.add_argument("data_dir", type=str,
                         help="Path to folder containing .conllu files.")
-    parser.add_argument("model", type=str,
-                        help="HuggingFace model name (e.g. gpt2, distilgpt2).")
+    parser.add_argument("model", type=str, nargs="?", default="distilgpt2",
+                        help="HuggingFace model name (default: distilgpt2).")
     # Optional
     parser.add_argument("--context", "-c", type=str, default="document",
                         help="Context level (default: document). Must include s_t for next-sentence analysis.")

@@ -19,17 +19,17 @@ the `context` column encoding the conditioning amount:
   document
 
 Example (A100):
-  uv run python scripts/run_context_sweep.py data/ gpt2 \\
+  uv run python scripts/run_context_sweep.py data/ \\
       --generate_counterfactual --fast --batch_size 128 \\
       --output_dir outputs --output_name sweep_context_word.csv
 
 Token-level output:
-  uv run python scripts/run_context_sweep.py data/ gpt2 \\
+  uv run python scripts/run_context_sweep.py data/ \\
       --generate_counterfactual --uid_unit token --fast --batch_size 128 \\
       --output_dir outputs --output_name sweep_context_tok.csv
 
 Custom context levels:
-  uv run python scripts/run_context_sweep.py data/ gpt2 \\
+  uv run python scripts/run_context_sweep.py data/ \\
       --generate_counterfactual \\
       --context_levels no_ctx sent[-1,+0] sent[-3,+0] sent[-5,+0] document \\
       --output_dir outputs --output_name sweep_context_sent.csv
@@ -72,8 +72,8 @@ def main():
     # Required
     parser.add_argument("data_dir", type=str,
                         help="Path to folder containing .conllu files.")
-    parser.add_argument("model", type=str,
-                        help="HuggingFace model name (e.g. gpt2, distilgpt2).")
+    parser.add_argument("model", type=str, nargs="?", default="distilgpt2",
+                        help="HuggingFace model name (default: distilgpt2).")
     # Optional
     parser.add_argument(
         "--context_levels", nargs="+",
