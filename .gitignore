@@ -15,6 +15,10 @@ wheels/
 # Data
 data/*
 *.conllu
+outputs/*
 
 # Kubernetes yaml files
 *.yaml
+
+# Plots/analysis outputs
+plots/*
