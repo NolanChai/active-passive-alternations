@@ -57,27 +57,31 @@ class Document(list[Sentence]):
             for s in self[:target_indices[-1] + 1]:
                 counterfactual_doc.append(s.deep_copy())
             # append until we find a convertable sentence; convert and append
-            for i, s in enumerate(self[target_indices[-1] + 1:]):
-                if isinstance(s, PassiveSentence):
-                    counterfactual_doc.append(s.depassivize())
-                    # update index of previous passive
-                    target_indices.append(target_indices[-1] + i + 1)
-                    conversions.append("p>a")
-                    break
-                elif isinstance(s, ActiveSentence):
-                    counterfactual_doc.append(s.passivize())
-                    target_indices.append(target_indices[-1] + i + 1)
-                    conversions.append("a>p")
-                    break
-                else:
-                    counterfactual_doc.append(s.deep_copy())
+            try:
+                for i, s in enumerate(self[target_indices[-1] + 1:]):
+                    if isinstance(s, PassiveSentence):
+                        counterfactual_doc.append(s.depassivize())
+                        # update index of previous passive
+                        target_indices.append(target_indices[-1] + i + 1)
+                        conversions.append("p>a")
+                        break
+                    elif isinstance(s, ActiveSentence):
+                        counterfactual_doc.append(s.passivize())
+                        target_indices.append(target_indices[-1] + i + 1)
+                        conversions.append("a>p")
+                        break
+                    else:
+                        counterfactual_doc.append(s.deep_copy())
+            except Exception as e:
+                print(f"Error on doc {self.doc_id}, sentence {i}")
+                print(e)
+                target_indices.append(target_indices[-1] + i + 1)
+                continue
             # append remaining sentences
             for s in self[target_indices[-1] + 1:]:
                 counterfactual_doc.append(s.deep_copy())
-            # print(len(counterfactual_doc))
-            # print(counterfactual_doc[1])
-            # print(counterfactual_doc[1].metadata)
             result.append(Document(counterfactual_doc))
+            
         return list(zip(result, target_indices[1:], conversions))
     
     def format_doc(self):

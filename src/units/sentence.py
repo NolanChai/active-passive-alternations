@@ -353,7 +353,14 @@ class PassiveSentence(Sentence):
         agent_infl = self.agent_word['inflection']
         
         # Determine new inflection for main verb
-        verb_word['form'] = getInflection(verb_word['lemma'], auxpass_infl)[0]
+        try:
+            verb_word['form'] = getInflection(verb_word['lemma'], auxpass_infl)[0]
+        except Exception as e:
+            print(self.text)
+            print("VERB:", verb_word)
+            print("AUXPASS INFL:", auxpass_infl)
+            print("INFLECTIONS:", getAllInflections(verb_word['lemma']))
+            raise e
         # add do-support for clausal negation when no other auxiliary is present
         if neg_tokens and not has_focus_neg:
             has_other_aux = any(w['upos'] == 'AUX' or w['xpos'] == 'MD' for w in verb_const)
