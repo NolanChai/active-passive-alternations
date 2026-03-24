@@ -47,6 +47,9 @@ def main():
     # Paths
     UD_paths = Path(args.data_dir).iterdir()
     output_dir = Path(args.output_dir)
+    if not output_dir.exists():
+        print(f"{output_dir} does not exist. Making one for you...")
+        output_dir.mkdir()
     output_file = Path(args.output_name).with_suffix(".csv")
     output_filepath = output_dir / output_file
     
