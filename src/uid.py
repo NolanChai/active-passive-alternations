@@ -15,7 +15,7 @@ nlp = stanza.Pipeline(
     processors="tokenize,mwt,pos,lemma,depparse"
 )
 
-from src.units import Document, Sentence, Word
+from src.units import Document, Sentence, Word, PassiveSentence, ActiveSentence
 from src.unigram import UnigramLM
 from src.utils import *
 
@@ -67,7 +67,7 @@ def extend_doc_list(docs, current, current_id):
     curr_doc = Document(current)
     converted_docs = curr_doc.convert_all()
     curr_doc_text = [s.text for s in curr_doc]
-    docs.append((f'f::{current_id}::-1::og', curr_doc_text))
+    docs.append((f'f::{current_id}::-1::og', curr_doc_text, curr_doc))
     
     if len(converted_docs) > 0:
         counterf_docs, pass_idxs, conversions = zip(*converted_docs)
@@ -75,7 +75,7 @@ def extend_doc_list(docs, current, current_id):
                         for pass_idx, conv in zip(pass_idxs, conversions))
         counterf_doc_texts = [[s.text for s in counterf_doc] 
                             for counterf_doc in counterf_docs]
-        counterf_doc_tuples = zip(counterf_ids, counterf_doc_texts)
+        counterf_doc_tuples = zip(counterf_ids, counterf_doc_texts, [curr_doc] * len(counterf_doc_texts))
         docs.extend(counterf_doc_tuples)
 
 def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
@@ -371,6 +371,54 @@ def uid_metrics(surprisals,
         "uid_len": len(arr),
     }
 
+def ling_features(sentence, tokenizer, uni_model,
+                  uid_unit='token'):
+    assert (isinstance(sentence, PassiveSentence) or isinstance(sentence, ActiveSentence))
+    is_passive = isinstance(sentence, PassiveSentence)
+    if is_passive:
+        agent = sentence.agent
+        agent_word = sentence.agent_word
+        patient = sentence.passive_subject
+        patient_word = sentence.passive_subject_word
+    else:
+        agent = sentence.active_subject
+        agent_word = sentence.active_subject_word
+        patient = sentence.active_object
+        patient_word = sentence.active_object_word
+    
+    result = dict()
+    result.update(get_constituent_features(agent, agent_word, "agent", 
+                                           tokenizer, uni_model,
+                                           unit=uid_unit))
+    result.update(get_constituent_features(patient, patient_word, "patient", 
+                                           tokenizer, uni_model,
+                                           unit=uid_unit))
+    return result
+    
+def get_constituent_features(const, const_word, name, 
+                             tokenizer, uni_model,
+                             unit='token',):
+    tokens = tokenizer.convert_ids_to_tokens(tokenizer.encode(const.text, add_special_tokens=False))
+    if unit == 'token':
+        units = tokens
+    elif unit == 'word':
+        units = tokens_to_words(tokens, tokenizer)
+    else:
+        raise ValueError(f"Unit {unit} not yet supported for linguistic features.")
+        
+    length = len(units)
+    _, unigram_prob = uni_model(tokens)
+    is_pronoun = const_word['upos'] == 'PRON'
+    is_plural = const_word['feats']['Number'] == 'Plur'
+    
+    return {
+        name: const,
+        f"{name}_len": length,
+        f"{name}_unigram_prob": unigram_prob,
+        f"{name}_is_pronoun": is_pronoun,
+        f"{name}_is_plural": is_plural,
+    }
+
 def map_context_levels(levels):
         context_mapping = {
             "sentence": {"name": "sentence", "mode": "none"},
@@ -506,7 +554,7 @@ def run_uid_pipeline(
         leave=True
     )
     doc_idx = 0
-    for doc_id, sents in docs:
+    for doc_id, sents, og_doc in docs:
         sents_pbar = tqdm(
             total=len(sents),
             desc=f"Processing {doc_id}",
@@ -516,6 +564,7 @@ def run_uid_pipeline(
         )
         fact, doc_name, conv_id, conv_type = doc_id.split("::")
         for i, sent in enumerate(sents):
+            og_sent = og_doc[i]
             if fact != 'f' and i != int(conv_id):
                 sents_pbar.update(1)
                 continue
@@ -541,7 +590,8 @@ def run_uid_pipeline(
                     uni_probs, _ = unigram(tokens)
                     if len(surprisals) < 2:
                         raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
-                    metrics = uid_metrics(surprisals, uni_probs)
+                    uid_metrics = uid_metrics(surprisals, uni_probs)
+                    ling_features = ling_features(og_sent, tokenizer, unigram, uid_unit)
                     row = {
                         "doc_id": doc_id,
                         "sent_idx": i,
@@ -550,7 +600,8 @@ def run_uid_pipeline(
                         "tokens": tokens,
                         "units": units,
                     }
-                    row.update(metrics)
+                    row.update(uid_metrics)
+                    row.update(ling_features)
                     rows.append(row)
                 except AssertionError as e:
                     if verbose:

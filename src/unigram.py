@@ -63,9 +63,11 @@ class UnigramLM:
                 continue
             elif tok.startswith("Ġ") or tok.startswith("_"):
                 words.append(curr_word)
-                curr_word = tok
+                curr_word = tok.strip("Ġ").strip("_")
             else:
                 curr_word += tok
+        if curr_word:
+            words.append(curr_word)
         return words
     
     def __call__(self, text):

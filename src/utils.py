@@ -83,3 +83,19 @@ def plot_token_surprisal(tokens,
     if show:
         plt.show()
     return fig, ax
+
+def tokens_to_words(tokens, tokenizer):
+    result = []
+    curr_word = ""
+    for tok in tokens:
+        if tok in tokenizer.all_special_tokens:
+            continue
+        elif tok.startswith("Ġ") or tok.startswith("_"):
+            if curr_word:
+                result.append(curr_word)
+            curr_word = tok
+        else:
+            curr_word += tok
+    if curr_word:
+        result.append(curr_word)
+    return result
