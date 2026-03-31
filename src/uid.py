@@ -340,7 +340,7 @@ def get_input_start_end(sent_ids,
     return input_ids, start, end
     
 # Really basic UID metrics
-def uid_metrics(surprisals, 
+def get_uid_metrics(surprisals, 
                 uni_probs):
     if not surprisals:
         return {}
@@ -371,7 +371,7 @@ def uid_metrics(surprisals,
         "uid_len": len(arr),
     }
 
-def ling_features(sentence, tokenizer, uni_model,
+def get_ling_features(sentence, tokenizer, uni_model,
                   uid_unit='token'):
     assert (isinstance(sentence, PassiveSentence) or isinstance(sentence, ActiveSentence))
     is_passive = isinstance(sentence, PassiveSentence)
@@ -590,8 +590,8 @@ def run_uid_pipeline(
                     uni_probs, _ = unigram(tokens)
                     if len(surprisals) < 2:
                         raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
-                    uid_metrics = uid_metrics(surprisals, uni_probs)
-                    ling_features = ling_features(og_sent, tokenizer, unigram, uid_unit)
+                    uid_metrics = get_uid_metrics(surprisals, uni_probs)
+                    ling_features = get_ling_features(og_sent, tokenizer, unigram, uid_unit)
                     row = {
                         "doc_id": doc_id,
                         "sent_idx": i,
