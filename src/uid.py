@@ -409,7 +409,7 @@ def get_constituent_features(const, const_word, name,
     length = len(units)
     _, unigram_prob = uni_model(tokens)
     is_pronoun = const_word['upos'] == 'PRON'
-    is_plural = const_word['feats']['Number'] == 'Plur'
+    is_plural = const_word['feats'].get('Number', 'Sing') == 'Plur'
     
     return {
         name: const,
