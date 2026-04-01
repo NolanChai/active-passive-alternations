@@ -29,11 +29,30 @@ from src.utils import *
 
 
 def sent_text(sent):
+    """ Retrieve the text from a sentence object, if it has no "text" metadata.
+
+    Args:
+        sent (Sentence): list of Word objects to retrieve text for.
+
+    Returns:
+        str: text of sentence, formed from word forms.
+    """
     toks = [t for t in sent if isinstance(t.get("id"), int)]
     return " ".join(t["form"] for t in toks)
 
 
 def iter_ud_docs(path, limit_docs=None, limit_sents_per_doc=None):
+    """ Retrieve all documents from a given .conllu file, putting into list of Document objects.
+        DEPRECATED: Use iter_counterfactual_docs to generate cf documents.
+
+    Args:
+        path (pathlike): Path to file to read from.
+        limit_docs (int, optional): Number of docs to read in. Defaults to None.
+        limit_sents_per_doc (int, optional): Number of sentences per doc to read in. Defaults to None.
+
+    Returns:
+        List(Tuple): List of (doc id, Document) pairs.
+    """
     docs = []
     current_id = None
     current = []
@@ -64,6 +83,13 @@ def iter_ud_docs(path, limit_docs=None, limit_sents_per_doc=None):
     return docs
 
 def extend_doc_list(docs, current, current_id):
+    """ Extend a given list of documents with the current document and its counterfactual counterparts.
+
+    Args:
+        docs (List(Document)): List of docs to extend.
+        current (Document): Document to add to the list.
+        current_id (str): Id of the given document.
+    """
     curr_doc = Document(current)
     converted_docs = curr_doc.convert_all()
     curr_doc_text = [s.text for s in curr_doc]
@@ -79,6 +105,23 @@ def extend_doc_list(docs, current, current_id):
         docs.extend(counterf_doc_tuples)
 
 def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
+    """ Retrieve all documents from a file and generates counterfactual documents 
+        by converting active sentences to passive and vice versa.
+
+    Args:
+        path (pathlike): Path to file to retrieve from.
+        limit_docs (int, optional): Number of docs to retrieve, including counterfactual.
+            This value is approximate, as all counterfactual documents are always 
+            added for the current document. Defaults to None.
+        limit_sents_per_doc (int, optional): Number of sentences to retrieve from each doc. 
+            Defaults to None.
+
+    Returns:
+        List(Tuple): List of (doc_id, Document) tuples. doc_id is formatted as `f/cf::id::conversion_idx::conversion_direction`.
+            `conversion_idx` is the index of the converted sentence, and `conversion_direction` is either 'a>p' or 'p>a'.
+            If the document is factual, conversion_idx == -1, conversion_direction == 'og'.
+        
+    """
     docs = []
     current_id = None
     current = []
@@ -110,6 +153,16 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
 
 
 def load_lm(model_name="distilgpt2", device=None):
+    """ Load the requested language model and corresponding tokenixer from the transformers library.
+
+    Args:
+        model_name (str, optional): Name of LM to load. Defaults to "distilgpt2".
+        device (str, optional): Device on which to save the model (ex: 'cuda').
+
+    Returns:
+        Tuple(tokenizer, model, device): tuple of loaded tokenizer and model, 
+            along with the device they're saved on.
+    """
     # note - using distilgpt for fast prototyping, use gpt-2 for final
     assert device is not None, "Please specify device."
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -129,10 +182,37 @@ def build_context(
     idx,
     mode,
     k=None,
-    max_tokens=None,
     window=None,
     tokenizer=None,
 ):
+    """ Builds context for a sentence from a document and a given context level.
+    Possible context levels include:
+    - `none`: No context added.
+    - `prev`: `k` previous sentences.
+    - `doc`: Entire document up to sentence of interest.
+    - `window`: Window around sentence of interest.
+
+    Args:
+        sents (List(str)): List of sentences in the document, as text.
+        idx (int): Index of sentence of interest.
+        mode (str): Context level to use.
+        k (int, optional): Number of sentences to take, when `mode`=='prev'. Defaults to None.
+        window (dict, optional): Dictionary containing information about the window. Should contain the following keys:
+            `type`: Unit to use for window. Either 'sent' or 'token'.
+            `side`: Which side to take the window on. Either 'left', 'right', or 'both'.
+            `size`: How many units to take on the given side.
+            `left` and/or `right`: Number of units to take on the left or right side. Alternative to `side` and `size`.
+            `rng`: 2-tuple like (<left>, <right>) containing the units to take from each side. Alternative to `side` and `size`.
+            Defaults to None.
+        tokenizer (AutoTokenizer, optional): Tokenizer to use. Required if `window['type']`=='token'. Defaults to None.
+
+    Raises:
+        ValueError: If window range is not a 2-tuple.
+        ValueError: If 'token' is chosen for window unit, but no tokenizer is given.
+
+    Returns:
+        str: Relevant context for the sentence of interest.
+    """
     # mode: none, prev, doc, window
     if mode == "none" or idx == 0:
         return ""
@@ -195,6 +275,16 @@ def build_context(
     return ""
 
 def truncate_doc_ids(document_ids, trunc_from_left=0, trunc_from_right=0):
+    """ Truncates a list of token ids to fit in model context.
+
+    Args:
+        document_ids (List(List(int))): List of lists (sentences) of token ids.
+        trunc_from_left (int, optional): Number to truncate from left side. Defaults to 0.
+        trunc_from_right (int, optional): Number to truncate from right side. Defaults to 0.
+
+    Returns:
+        List(List(int)): Input list, truncated as requested.
+    """
     result = []
     total_len = sum([len(sent) for sent in document_ids])
     result_len = total_len - trunc_from_left - trunc_from_right
@@ -316,6 +406,26 @@ def get_input_start_end(sent_ids,
                         doc_ids,
                         uid_level,
                         sent_idx):
+    """ Determines the start and end indices of input to the LM based on context 
+        and uid levels.
+
+    Args:
+        sent_ids (List(int)): Token ids for the sentence of interest.
+        context_ids (List(int)): Token ids for the required context.
+        doc_ids (List(List(int))): Token ids for each sentence in the document.
+        uid_level (str): Level at which metrics are calculated.
+            Either 'sentence', 'document', or '(-b,+a)', where `b` and `a` are
+            ints determining the number of tokens to take before and after the 
+            sentence of interest.
+        sent_idx (int): Index of the sentence of interest within the document.
+
+    Raises:
+        ValueError: If the requested "before" tokens extends beyond the given context.
+        ValueError: If an unsupported uid level is requested.
+
+    Returns:
+        Tuple(List(int), int, int): The full input and the start idx and end idx for calculation.
+    """
     if uid_level == "sentence":
         input_ids = [context_ids + sent_ids]
         start = len(context_ids)
@@ -342,6 +452,15 @@ def get_input_start_end(sent_ids,
 # Really basic UID metrics
 def get_uid_metrics(surprisals, 
                 uni_probs):
+    """ Calculates UID and surprisal metrics based on a given list of surprisals.
+
+    Args:
+        surprisals (List(float)): Iterable of surprisal values.
+        uni_probs (List(float)): Iterable of unigram probabilities for SLOR calculation.
+
+    Returns:
+        dict: dictionary containing various metrics.
+    """
     if not surprisals:
         return {}
     arr = np.array(surprisals)
@@ -420,6 +539,14 @@ def get_constituent_features(const, const_word, name,
     }
 
 def map_context_levels(levels):
+    """ Helper function to map context level config dictionaries from a list of level keywords.
+
+    Args:
+        levels (List(str)): List of context level descriptors.
+
+    Returns:
+        List(Dict): List of context configurations.
+    """
         context_mapping = {
             "sentence": {"name": "sentence", "mode": "none"},
             "prev1": {"name": "prev1", "mode": "prev", "k": 1},
@@ -511,7 +638,7 @@ def run_uid_pipeline(
         limit_docs=3,
         limit_sents_per_doc=8,
         context_levels=None,
-        generate_counterfactual=False,
+        generate_counterfactual=True,
         uid_level="sentence",
         uid_unit="token",
         device=None,
@@ -520,6 +647,43 @@ def run_uid_pipeline(
         verbose=False,
         save_every=10
     ):
+    """ Runs the pipeline of counterfactual document generation and metric calculation on a given file.
+
+    Args:
+        ud_path (pathlike): File to read documents from and process. 
+            Must be in CoNNL-U format.
+        model_name (str, optional): Name of language model to use for 
+            processing. Defaults to "distilgpt2".
+        limit_docs (int, optional): Number of documents to process. Defaults to 
+            3.
+        limit_sents_per_doc (int, optional): Number of sentences to process from 
+            each document. Defaults to 8.
+        context_levels (List(str), optional): List of context levels to 
+            calculate. Defaults to all available.
+        generate_counterfactual (bool, optional): Whether to generate and 
+            process counterfactual documents. Defaults to True.
+        uid_level (str, optional): Level at which metrics are calculated. Can be 
+            'sentence', 'document', or '(-b,+a)', where `b` and `a` are ints 
+            determining the number of tokens to take before and after the 
+            sentence of interest. 'Defaults to "sentence".
+        uid_unit (str, optional): Smallest unit to consider for metrics. 
+            Can be 'word' or 'token'. Defaults to "token".
+        device (str, optional): Device on which models are saved and run. 
+            Defaults to None.
+        output_dir (pathlike, optional): Path to which results are saved. 
+            If None, saves to current directory.
+        output_file (str, optional): Name of output file. If None, output 
+            filename is 'output_<uid_unit>_<uid_level>_uid.csv'.
+        verbose (bool, optional): Defaults to False.
+        save_every (int, optional): Controls how many documents are processed 
+            before a checkpoint is saved. Defaults to 10.
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+    """
     print(f"Processing {ud_path}...")
     # Set up device
     if device is None:
@@ -529,6 +693,10 @@ def run_uid_pipeline(
             device = torch.device("mps")  # metal for mac
         else:
             device = torch.device("cpu")
+    
+    # Fix paths
+    output_dir = output_dir or Path('.')
+    output_file = output_file or Path(f'output_{uid_unit}_{uid_level}_uid.csv')
     
     # Generate counterfactual documents if applicable
     if generate_counterfactual:
