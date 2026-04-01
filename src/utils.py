@@ -4,10 +4,15 @@ from pathlib import Path
 from pyinflect import getAllInflections, getInflection
 from conllu import TokenList
 import numpy as np
+import random
 import torch
 import matplotlib.pyplot as plt
 
 from src.units import *
+
+import nltk
+nltk.download('wordnet')
+from nltk.corpus import wordnet as wn
 
 def render_tree(sent):
     """Render a dependency tree with deplacy.
@@ -99,3 +104,26 @@ def tokens_to_words(tokens, tokenizer):
     if curr_word:
         result.append(curr_word)
     return result
+
+def is_animate(word):
+    """Determines if the given word is animate via. a majority vote of the 
+        word's possible definitions. If a tie occurs, it is up to chance.
+
+    Args:
+        word (str): Word in question.
+
+    Returns:
+        bool: True if animate, False otherwise.
+    """
+    synsets = wn.synsets(word, pos=wn.NOUN)
+    animate_defs = 0
+    inanimate_defs = 0
+    for syn in synsets:
+        animate = any(anim in syn.lexname() for anim in ['person', 'animal'])
+        if animate:
+            animate_defs += 1
+        else:
+            inanimate_defs += 1
+    if animate_defs == inanimate_defs:
+        return random.random() >= 0.5
+    return animate_defs > inanimate_defs

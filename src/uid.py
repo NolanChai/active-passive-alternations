@@ -529,6 +529,7 @@ def get_constituent_features(const, const_word, name,
     _, unigram_prob = uni_model(tokens)
     is_pronoun = const_word['upos'] == 'PRON'
     is_plural = const_word['feats'].get('Number', 'Sing') == 'Plur'
+    animate = is_animate(const_word['lemma'])
     
     return {
         name: const,
@@ -536,6 +537,7 @@ def get_constituent_features(const, const_word, name,
         f"{name}_unigram_prob": unigram_prob,
         f"{name}_is_pronoun": is_pronoun,
         f"{name}_is_plural": is_plural,
+        f"{name}_is_animate": animate,
     }
 
 def map_context_levels(levels):
@@ -547,22 +549,22 @@ def map_context_levels(levels):
     Returns:
         List(Dict): List of context configurations.
     """
-        context_mapping = {
-            "sentence": {"name": "sentence", "mode": "none"},
-            "prev1": {"name": "prev1", "mode": "prev", "k": 1},
-            "prev3": {"name": "prev3", "mode": "prev", "k": 3},
-            "document": {"name": "document", "mode": "doc"},
-            
-            # sent[-L,+R] = sentence window with L sentences before, R after
-            # tok[-L,+R]  = token window with L tokens before, R after
-            "sent[-2,+0]": {"name": "sent[-2,+0]", "mode": "window", "window": {"type": "sent", "side": "left", "size": 2}},
-            "sent[-2,+2]": {"name": "sent[-2,+2]", "mode": "window", "window": {"type": "sent", "side": "both", "size": 2}},
-            "tok[-64,+0]": {"name": "tok[-64,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 64}},
-            "tok[-64,+64]": {"name": "tok[-64,+64]", "mode": "window", "window": {"type": "token", "side": "both", "size": 64}},
-        }
-        if levels is None:
-            return list(context_mapping.values())
-        return [context_mapping[level] for level in levels]
+    context_mapping = {
+        "sentence": {"name": "sentence", "mode": "none"},
+        "prev1": {"name": "prev1", "mode": "prev", "k": 1},
+        "prev3": {"name": "prev3", "mode": "prev", "k": 3},
+        "document": {"name": "document", "mode": "doc"},
+        
+        # sent[-L,+R] = sentence window with L sentences before, R after
+        # tok[-L,+R]  = token window with L tokens before, R after
+        "sent[-2,+0]": {"name": "sent[-2,+0]", "mode": "window", "window": {"type": "sent", "side": "left", "size": 2}},
+        "sent[-2,+2]": {"name": "sent[-2,+2]", "mode": "window", "window": {"type": "sent", "side": "both", "size": 2}},
+        "tok[-64,+0]": {"name": "tok[-64,+0]", "mode": "window", "window": {"type": "token", "side": "left", "size": 64}},
+        "tok[-64,+64]": {"name": "tok[-64,+64]", "mode": "window", "window": {"type": "token", "side": "both", "size": 64}},
+    }
+    if levels is None:
+        return list(context_mapping.values())
+    return [context_mapping[level] for level in levels]
 
 def process_surprisals(tokenizer,
                        tokens,
