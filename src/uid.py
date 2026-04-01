@@ -745,7 +745,6 @@ def run_uid_pipeline(
                         i,
                         mode=cfg["mode"],
                         k=cfg.get("k"),
-                        max_tokens=cfg.get("max_tokens"),
                         window=cfg.get("window"),
                         tokenizer=tokenizer,
                     )
