@@ -127,3 +127,24 @@ def is_animate(word):
     if animate_defs == inanimate_defs:
         return random.random() >= 0.5
     return animate_defs > inanimate_defs
+
+def is_definite(const_word):
+    """Determines if the given word is definite given its context. 
+        Requires that the word have children from the dependency tree.
+
+    Args:
+        const_word (Word): word object containing children of the word in 
+            dependency tree.
+
+    Returns:
+        bool: True if the word is definite, determined by presence of a 
+            definite article ("The") or possessive marker.
+    """
+    for word in const_word['children']:
+        if word is None:
+            continue
+        if word['feats'] is not None and word.get('feats', 'NA').get('Definite', 'NA') == 'Def':
+            return True
+        if word['deprel'] == 'nmod:poss':
+            return True
+    return False

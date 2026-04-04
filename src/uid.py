@@ -530,7 +530,10 @@ def get_constituent_features(const, const_word, name,
     unigram_prob = np.log(unigram_prob)
     is_pronoun = const_word['upos'] == 'PRON'
     is_plural = const_word['feats'].get('Number', 'Sing') == 'Plur'
+    
+    # more complex features handled with helper functions
     animate = is_animate(const_word['lemma'])
+    definite = is_definite(const_word)
     
     return {
         name: const,
@@ -539,6 +542,7 @@ def get_constituent_features(const, const_word, name,
         f"{name}_is_pronoun": is_pronoun,
         f"{name}_is_plural": is_plural,
         f"{name}_is_animate": (animate | is_pronoun),
+        f"{name}_is_definite": (definite | is_pronoun),
     }
 
 def map_context_levels(levels):
