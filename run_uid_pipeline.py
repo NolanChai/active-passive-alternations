@@ -45,7 +45,7 @@ def main():
                 extra_args[key] = value
 
     # Paths
-    UD_paths = Path(args.data_dir).iterdir()
+    UD_paths = Path(args.data_dir).glob('*.conllu')
     output_dir = Path(args.output_dir)
     if not output_dir.exists():
         print(f"{output_dir} does not exist. Making one for you...")
