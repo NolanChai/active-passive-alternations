@@ -526,7 +526,7 @@ def get_constituent_features(const, const_word, name,
         raise ValueError(f"Unit {unit} not yet supported for linguistic features.")
         
     length = len(units)
-    _, unigram_prob = uni_model(tokens)
+    _, unigram_prob = uni_model(const_word['form'])
     unigram_prob = np.log(unigram_prob)
     is_pronoun = const_word['upos'] == 'PRON'
     is_plural = const_word['feats'].get('Number', 'Sing') == 'Plur'
