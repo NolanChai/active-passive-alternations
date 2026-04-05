@@ -529,7 +529,7 @@ def get_constituent_features(const, const_word, name,
     _, unigram_prob = uni_model(const_word['form'])
     unigram_prob = np.log(unigram_prob)
     is_pronoun = const_word['upos'] == 'PRON'
-    is_plural = const_word['feats'].get('Number', 'Sing') == 'Plur'
+    is_plural = (const_word['feats'] is not None) & (const_word['feats'].get('Number', 'Sing') == 'Plur')
     
     # more complex features handled with helper functions
     animate = is_animate(const_word['lemma'])
