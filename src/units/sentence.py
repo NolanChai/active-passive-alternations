@@ -195,15 +195,18 @@ class PassiveSentence(Sentence):
         
         # Extract core
         self.passive_subject, self.passive_subject_word = self.find_pass_subj()
+        if self.passive_subject is None or self.passive_subject_word is None:
+            raise ValueError("No passive subject found in the sentence.")
+        
         self.verb, self.verb_word = self.find_verb()
+        if self.verb is None or self.verb_word is None:
+            raise ValueError("No verb found in the sentence.")
+        
         self.auxpass = next(filter(lambda w: w['deprel'] == 'aux:pass', self.verb), None)
         if self.auxpass is None:
             raise ValueError("No auxiliary passive verb found.")
+        
         self.agent, self.agent_word = self.find_pass_agent()
-        if self.passive_subject is None or self.passive_subject_word is None:
-            raise ValueError("No passive subject found in the sentence.")
-        if self.verb is None or self.verb_word is None:
-            raise ValueError("No verb found in the sentence.")
         if self.agent is None or self.agent_word is None:
             raise ValueError("No passive agent found in the sentence.")
     
@@ -357,7 +360,7 @@ class PassiveSentence(Sentence):
             verb_word['form'] = getInflection(verb_word['lemma'], auxpass_infl)[0]
         except Exception as e:
             print(self.text)
-            print("VERB:", verb_word)
+            print("VERB:", verb_word, "/", verb_word['lemma'])
             print("AUXPASS INFL:", auxpass_infl)
             print("INFLECTIONS:", getAllInflections(verb_word['lemma']))
             raise e
