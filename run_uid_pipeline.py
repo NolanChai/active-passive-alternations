@@ -56,21 +56,31 @@ def main():
     
     uid_dfs = []
     for UD_path in UD_paths:
-        uid_df = run_uid_pipeline(
-            UD_path,
-            model_name=args.model,
-            limit_docs=args.limit_docs,
-            limit_sents_per_doc=args.limit_sents_per_doc,
-            context_levels=args.context,
-            generate_counterfactual=args.generate_counterfactual,
-            uid_level=args.uid_level,
-            uid_unit=args.uid_unit,
-            device=args.device,
-            output_dir=output_dir,
-            output_file=output_file,
-            verbose=args.verbose
-        )
+        try:
+            uid_df = run_uid_pipeline(
+                UD_path,
+                model_name=args.model,
+                limit_docs=args.limit_docs,
+                limit_sents_per_doc=args.limit_sents_per_doc,
+                context_levels=args.context,
+                generate_counterfactual=args.generate_counterfactual,
+                uid_level=args.uid_level,
+                uid_unit=args.uid_unit,
+                device=args.device,
+                output_dir=output_dir,
+                output_file=output_file,
+                verbose=args.verbose
+            )
+        except Exception as e:
+            print(f"Uncaught error in file {UD_path}:")
+            print(e)
+            print("Skipping...")
+            continue
         uid_dfs.append(uid_df)
+    print(f"{len(uid_dfs)}/{len(UD_paths)} files successfully processed.")
+    if len(uid_dfs) == 0:
+        print("Please check files.")
+        return
     uid_dfs = pd.concat(uid_dfs)
     uid_dfs.to_csv(output_filepath)
     
