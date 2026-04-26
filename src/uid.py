@@ -382,9 +382,9 @@ def compute_surprisal(sentence,
     with torch.no_grad():
         logits = model(input_ids).logits
         log_probs = torch.log_softmax(logits, dim=-1)
+    input_ids = input_ids.to("cpu")
     
     surprisals = []
-
     # compute surprisals
     for i in range(start, end):
         try:
