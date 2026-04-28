@@ -380,7 +380,7 @@ def compute_surprisal(sentence,
     # run through model
     input_ids = torch.tensor(input_ids, device=device)
     with torch.no_grad():
-        logits = model(input_ids).logits
+        logits = model(input_ids).logits.to("cpu")
         log_probs = torch.log_softmax(logits, dim=-1)
     input_ids = input_ids.to("cpu")
     
