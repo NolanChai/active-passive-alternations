@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import torch
 from conllu import parse, parse_incr
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 import stanza
 stanza.download('en')
@@ -26,7 +25,6 @@ from src.utils import *
 # - Previous sentence(s) (local discourse)
 # - Document-level (full prior discourse)
 # - Windowed context (e.g. +/- n sentences, +/- n tokens)
-
 
 def sent_text(sent):
     """ Retrieve the text from a sentence object, if it has no "text" metadata.
@@ -149,32 +147,6 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
             extend_doc_list(docs, current, current_id)
 
     return docs
-    
-
-
-def load_lm(model_name="distilgpt2", device=None):
-    """ Load the requested language model and corresponding tokenixer from the transformers library.
-
-    Args:
-        model_name (str, optional): Name of LM to load. Defaults to "distilgpt2".
-        device (str, optional): Device on which to save the model (ex: 'cuda').
-
-    Returns:
-        Tuple(tokenizer, model, device): tuple of loaded tokenizer and model, 
-            along with the device they're saved on.
-    """
-    # note - using distilgpt for fast prototyping, use gpt-2 for final
-    assert device is not None, "Please specify device."
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
-
-    if tokenizer.bos_token_id is None:
-        tokenizer.bos_token = tokenizer.eos_token
-
-    model.eval()
-
-    model.to(device)
-    return tokenizer, model, device
 
 
 def build_context(
@@ -644,7 +616,8 @@ def process_surprisals(tokenizer,
 
 def run_uid_pipeline(
         ud_path,
-        model_name="distilgpt2",
+        model,
+        tokenizer,
         limit_docs=3,
         limit_sents_per_doc=8,
         context_levels=None,
@@ -662,7 +635,7 @@ def run_uid_pipeline(
     Args:
         ud_path (pathlike): File to read documents from and process. 
             Must be in CoNNL-U format.
-        model_name (str, optional): Name of language model to use for 
+        model (str, optional): Name of language model to use for 
             processing. Defaults to "distilgpt2".
         limit_docs (int, optional): Number of documents to process. Defaults to 
             3.
@@ -695,14 +668,6 @@ def run_uid_pipeline(
         _type_: _description_
     """
     print(f"Processing {ud_path}...")
-    # Set up device
-    if device is None:
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-        elif torch.backends.mps.is_available():
-            device = torch.device("mps")  # metal for mac
-        else:
-            device = torch.device("cpu")
     
     # Fix paths
     output_dir = output_dir or Path('.')
@@ -715,7 +680,6 @@ def run_uid_pipeline(
         print(" Done")
     else:
         docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
-    tokenizer, model, device = load_lm(model_name=model_name, device=device)
     docs_text = "\n".join(["\n".join(doc[1]) for doc in docs])
     unigram = UnigramLM(tokenizer)
     unigram.fit(docs_text, uid_unit=uid_unit)

@@ -8,11 +8,37 @@ import random
 import torch
 import matplotlib.pyplot as plt
 
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from src.units import *
 
 import nltk
 nltk.download('wordnet')
 from nltk.corpus import wordnet as wn
+
+def load_lm(model_name="distilgpt2", device=None):
+    """ Load the requested language model and corresponding tokenixer from the transformers library.
+
+    Args:
+        model_name (str, optional): Name of LM to load. Defaults to "distilgpt2".
+        device (str, optional): Device on which to save the model (ex: 'cuda').
+
+    Returns:
+        Tuple(tokenizer, model, device): tuple of loaded tokenizer and model, 
+            along with the device they're saved on.
+    """
+    # note - using distilgpt for fast prototyping, use gpt-2 for final
+    assert device is not None, "Please specify device."
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+
+    if tokenizer.bos_token_id is None:
+        tokenizer.bos_token = tokenizer.eos_token
+
+    model.eval()
+
+    model.to(device)
+    return tokenizer, model, device
 
 def render_tree(sent):
     """Render a dependency tree with deplacy.

@@ -53,20 +53,30 @@ def main():
     output_file = Path(args.output_name).with_suffix(".csv")
     output_filepath = output_dir / output_file
     
-    
+    # Set up device
+    device = args.device
+    if device is None:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")  # metal for mac
+        else:
+            device = torch.device("cpu")
+    tokenizer, model, _ = load_lm(model_name=args.model, device=device)
     uid_dfs = []
     for UD_path in UD_paths:
         try:
             uid_df = run_uid_pipeline(
-                UD_path,
-                model_name=args.model,
+                ud_path=UD_path,
+                model=model, 
+                tokenizer=tokenizer,
                 limit_docs=args.limit_docs,
                 limit_sents_per_doc=args.limit_sents_per_doc,
                 context_levels=args.context,
                 generate_counterfactual=args.generate_counterfactual,
                 uid_level=args.uid_level,
                 uid_unit=args.uid_unit,
-                device=args.device,
+                device=device,
                 output_dir=output_dir,
                 output_file=output_file,
                 verbose=args.verbose
