@@ -681,9 +681,10 @@ def run_uid_pipeline(
     else:
         docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
     docs_text = "\n".join(["\n".join(doc[1]) for doc in docs])
+    print("Fitting Unigram Model...", end="")
     unigram = UnigramLM(tokenizer)
     unigram.fit(docs_text, uid_unit=uid_unit)
-
+    print("Done")
     rows = []
     
     context_levels = map_context_levels(context_levels)

@@ -62,7 +62,9 @@ def main():
             device = torch.device("mps")  # metal for mac
         else:
             device = torch.device("cpu")
+    print("Loading model...", end="")
     tokenizer, model, _ = load_lm(model_name=args.model, device=device)
+    print("Done")
     uid_dfs = []
     for UD_path in UD_paths:
         try:
