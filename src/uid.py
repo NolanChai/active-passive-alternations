@@ -38,76 +38,38 @@ def sent_text(sent):
     toks = [t for t in sent if isinstance(t.get("id"), int)]
     return " ".join(t["form"] for t in toks)
 
-
-def iter_ud_docs(path, limit_docs=None, limit_sents_per_doc=None):
-    """ Retrieve all documents from a given .conllu file, putting into list of Document objects.
-        DEPRECATED: Use iter_counterfactual_docs to generate cf documents.
-
-    Args:
-        path (pathlike): Path to file to read from.
-        limit_docs (int, optional): Number of docs to read in. Defaults to None.
-        limit_sents_per_doc (int, optional): Number of sentences per doc to read in. Defaults to None.
-
-    Returns:
-        List(Tuple): List of (doc id, Document) pairs.
-    """
-    docs = []
-    current_id = None
-    current = []
-
-    with open(path, "r", encoding="utf-8") as f:
-        for sent in parse_incr(f):
-            meta = sent.metadata
-            if "newdoc id" in meta:
-                if current_id is not None and current:
-                    docs.append((current_id, current))
-                    if limit_docs and len(docs) >= limit_docs:
-                        return docs
-                current_id = meta["newdoc id"]
-                current = []
-
-            text = meta.get("text") or sent_text(sent)
-            if text:
-                current.append(text)
-                if limit_sents_per_doc and len(current) >= limit_sents_per_doc:
-                    docs.append((current_id or "doc", current))
-                    if limit_docs and len(docs) >= limit_docs:
-                        return docs
-                    current = []
-
-        if current:
-            docs.append((current_id or "doc", current))
-
-    return docs
-
-def extend_doc_list(docs, current, current_id):
+def get_doc_list(current, current_id, gen_cf=False):
     """ Extend a given list of documents with the current document and its counterfactual counterparts.
 
     Args:
-        docs (List(Document)): List of docs to extend.
         current (Document): Document to add to the list.
         current_id (str): Id of the given document.
+    Returns:
+        List[Tuple[str, str, Document]]: Result document and counterfactual examples
     """
     curr_doc = Document(current)
-    converted_docs = curr_doc.convert_all()
     curr_doc_text = [s.text for s in curr_doc]
-    docs.append((f'f::{current_id}::-1::og', curr_doc_text, curr_doc))
+    result = [(f'f::{current_id}::-1::og', curr_doc_text, curr_doc)]
     
-    if len(converted_docs) > 0:
-        counterf_docs, pass_idxs, conversions = zip(*converted_docs)
-        counterf_ids = (f'cf::{current_id}::{pass_idx}::{conv}' 
-                        for pass_idx, conv in zip(pass_idxs, conversions))
-        counterf_doc_texts = [[s.text for s in counterf_doc] 
-                            for counterf_doc in counterf_docs]
-        counterf_doc_tuples = zip(counterf_ids, counterf_doc_texts, [curr_doc] * len(counterf_doc_texts))
-        docs.extend(counterf_doc_tuples)
+    if gen_cf:
+        converted_docs = curr_doc.convert_all()
+        if len(converted_docs) > 0:
+            counterf_docs, pass_idxs, conversions = zip(*converted_docs)
+            counterf_ids = (f'cf::{current_id}::{pass_idx}::{conv}' 
+                            for pass_idx, conv in zip(pass_idxs, conversions))
+            counterf_doc_texts = [[s.text for s in counterf_doc] 
+                                for counterf_doc in counterf_docs]
+            counterf_doc_tuples = zip(counterf_ids, counterf_doc_texts, [curr_doc] * len(counterf_doc_texts))
+            result.extend(counterf_doc_tuples)
+    return result
 
-def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
+def iter_docs(path, gen_cf=False, limit_docs=None, limit_sents_per_doc=None):
     """ Retrieve all documents from a file and generates counterfactual documents 
         by converting active sentences to passive and vice versa.
 
     Args:
         path (pathlike): Path to file to retrieve from.
+        gen_cf (bool): Whether or not to generate counterfactual documents. Defaults to False.
         limit_docs (int, optional): Number of docs to retrieve, including counterfactual.
             This value is approximate, as all counterfactual documents are always 
             added for the current document. Defaults to None.
@@ -120,34 +82,38 @@ def iter_counterfactual_docs(path, limit_docs=None, limit_sents_per_doc=None):
             If the document is factual, conversion_idx == -1, conversion_direction == 'og'.
         
     """
-    docs = []
+    num_docs = 0
     current_id = None
     current = []
 
-    with open(path, "r", encoding="utf-8") as f:
-        for sent in parse_incr(f):
-            meta = sent.metadata
-            if "newdoc id" in meta:
-                if current_id is not None and current:
-                    extend_doc_list(docs, current, current_id)
-                    if limit_docs and len(docs) >= limit_docs:
-                        return docs
-                current_id = meta["newdoc id"]
-                current = []
+    f = open(path, "r", encoding="utf-8")
+    sent_iter = parse_incr(f)
+    for sent in sent_iter:
+        meta = sent.metadata
+        if "newdoc id" in meta:
+            if current_id is not None and current:
+                doc_list = get_doc_list(current, current_id, gen_cf=gen_cf)
+                num_docs += len(doc_list)
+                yield doc_list 
+                if limit_docs and num_docs >= limit_docs:
+                    return
+            current_id = meta["newdoc id"]
+            current = []
 
-            current.append(sent)
-            if limit_sents_per_doc and len(current) >= limit_sents_per_doc:
-                current[0].metadata.update({"newdoc id": current_id})
-                extend_doc_list(docs, current, current_id)
-                if limit_docs and len(docs) >= limit_docs:
-                    return docs
-                current = []
+        current.append(sent)
+        if limit_sents_per_doc and len(current) >= limit_sents_per_doc:
+            current[0].metadata.update({"newdoc id": current_id})
+            doc_list = get_doc_list(current, current_id, gen_cf=gen_cf)
+            num_docs += len(doc_list)
+            yield doc_list
+            if limit_docs and num_docs >= limit_docs:
+                return
+            current = []
 
-        if current:
-            extend_doc_list(docs, current, current_id)
-
-    return docs
-
+    if current:
+        yield get_doc_list(current, current_id, gen_cf=gen_cf)
+        
+    f.close()
 
 def build_context(
     sents,
@@ -674,100 +640,97 @@ def run_uid_pipeline(
     output_file = output_file or Path(f'output_{uid_unit}_{uid_level}_uid.csv')
     
     # Generate counterfactual documents if applicable
-    if generate_counterfactual:
-        print("Generating counterfactual documents...", end="")
-        docs = iter_counterfactual_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
-        print(" Done")
-    else:
-        docs = iter_ud_docs(ud_path, limit_docs=limit_docs, limit_sents_per_doc=limit_sents_per_doc)
-    docs_text = "\n".join(["\n".join(doc[1]) for doc in docs])
+    docs_gen = iter_docs(ud_path, 
+                         gen_cf=generate_counterfactual,
+                         limit_docs=limit_docs, 
+                         limit_sents_per_doc=limit_sents_per_doc)
+    # Ensure only factual docs for unigram model
+    docs_fact = iter_docs(ud_path, 
+                         gen_cf=False,
+                         limit_docs=limit_docs, 
+                         limit_sents_per_doc=limit_sents_per_doc)
     print("Fitting Unigram Model...", end="")
+    docs_text = " ".join(
+        sent for doc_tuple in docs_fact for sent in doc_tuple[0][1]
+    )
     unigram = UnigramLM(tokenizer)
     unigram.fit(docs_text, uid_unit=uid_unit)
     print("Done")
     rows = []
     
     context_levels = map_context_levels(context_levels)
-    # print(f"Docs to process: {len(docs)}")
-    docs_pbar = tqdm(
-        total=len(docs),
-        desc="Processing Surprisals",
-        unit="documents",
-        position=0,
-        leave=True
-    )
     doc_idx = 0
-    for doc_id, sents, og_doc in docs:
-        sents_pbar = tqdm(
-            total=len(sents),
-            desc=f"Processing {doc_id}",
-            unit="sentences",
-            position=1,
-            leave=verbose
-        )
-        fact, doc_name, conv_id, conv_type = doc_id.split("::")
-        for i, sent in enumerate(sents):
-            og_sent = og_doc[i]
-            if fact != 'f' and i != int(conv_id):
+    for doc_list in docs_gen:
+        for doc_id, sents, og_doc in doc_list:
+            sents_pbar = tqdm(
+                total=len(sents),
+                desc=f"Processing {doc_id}",
+                unit="sentences",
+                position=1,
+                leave=verbose
+            )
+            fact, doc_name, conv_id, conv_type = doc_id.split("::")
+            for i, sent in enumerate(sents):
+                og_sent = og_doc[i]
+                if fact != 'f' and i != int(conv_id):
+                    sents_pbar.update(1)
+                    continue
+                for cfg in context_levels:
+                    try:
+                        context = build_context(
+                            sents,
+                            i,
+                            mode=cfg["mode"],
+                            k=cfg.get("k"),
+                            window=cfg.get("window"),
+                            tokenizer=tokenizer,
+                        )
+                        tokens, surprisals = compute_surprisal(
+                            sent, context, sents, i, 
+                            tokenizer=tokenizer, model=model, device=device,
+                            uid_level=uid_level,
+                            verbose=verbose
+                        )
+                        surprisals, units = process_surprisals(tokenizer, tokens, surprisals,
+                                                        uid_unit=uid_unit)
+                        uni_probs, _ = unigram(tokens)
+                        if len(surprisals) < 2:
+                            raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
+                        uid_metrics = get_uid_metrics(surprisals, uni_probs)
+                        ling_features = get_ling_features(og_sent, tokenizer, unigram, uid_unit)
+                        row = {
+                            "doc_id": doc_id,
+                            "sent_idx": i,
+                            "context": cfg["name"],
+                            "sentence": sent,
+                            "tokens": tokens,
+                            "units": units,
+                        }
+                        row.update(uid_metrics)
+                        row.update(ling_features)
+                        rows.append(row)
+                    except AssertionError as e:
+                        if verbose:
+                            print("Assertion error:", e)
+                            print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                        continue
+                    except ValueError as e:
+                        if verbose:
+                            print("Value error:", e)
+                            print(f"Skipping {doc_id} sentence {i} for context {cfg}")
+                        continue
                 sents_pbar.update(1)
-                continue
-            for cfg in context_levels:
-                try:
-                    context = build_context(
-                        sents,
-                        i,
-                        mode=cfg["mode"],
-                        k=cfg.get("k"),
-                        window=cfg.get("window"),
-                        tokenizer=tokenizer,
-                    )
-                    tokens, surprisals = compute_surprisal(
-                        sent, context, sents, i, 
-                        tokenizer=tokenizer, model=model, device=device,
-                        uid_level=uid_level,
-                        verbose=verbose
-                    )
-                    surprisals, units = process_surprisals(tokenizer, tokens, surprisals,
-                                                    uid_unit=uid_unit)
-                    uni_probs, _ = unigram(tokens)
-                    if len(surprisals) < 2:
-                        raise ValueError(f"Too few surprisals with UID level {uid_level} and UID unit {uid_unit}!")
-                    uid_metrics = get_uid_metrics(surprisals, uni_probs)
-                    ling_features = get_ling_features(og_sent, tokenizer, unigram, uid_unit)
-                    row = {
-                        "doc_id": doc_id,
-                        "sent_idx": i,
-                        "context": cfg["name"],
-                        "sentence": sent,
-                        "tokens": tokens,
-                        "units": units,
-                    }
-                    row.update(uid_metrics)
-                    row.update(ling_features)
-                    rows.append(row)
-                except AssertionError as e:
+                if uid_level == 'document':
                     if verbose:
-                        print("Assertion error:", e)
-                        print(f"Skipping {doc_id} sentence {i} for context {cfg}")
-                    continue
-                except ValueError as e:
-                    if verbose:
-                        print("Value error:", e)
-                        print(f"Skipping {doc_id} sentence {i} for context {cfg}")
-                    continue
-            sents_pbar.update(1)
-            if uid_level == 'document':
+                        print("Document-level analyses, skipping remaining sentences")
+                    break
+            sents_pbar.close()
+            if doc_idx % save_every == 0:
                 if verbose:
-                    print("Document-level analyses, skipping remaining sentences")
-                break
-        sents_pbar.close()
-        docs_pbar.update(1)
-        if doc_idx % save_every == 0:
-            if verbose:
-                print(f"Saving checkpoint at {doc_idx + 1} document(s)...")
-            temp_df = pd.DataFrame(rows)
-            temp_df.to_csv(output_dir / (output_file.stem + "_chkpt.csv"))
-        doc_idx += 1
+                    print(f"Saving checkpoint at {doc_idx + 1} document(s)...")
+                temp_df = pd.DataFrame(rows)
+                temp_df.to_csv(output_dir / (output_file.stem + "_chkpt.csv"))
+            doc_idx += 1
     print("Done")
     uid_df = pd.DataFrame(rows)
     return uid_df
