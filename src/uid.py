@@ -594,7 +594,8 @@ def run_uid_pipeline(
         output_dir=None,
         output_file=None,
         verbose=False,
-        save_every=10
+        save_every=10,
+        split_results=False
     ):
     """ Runs the pipeline of counterfactual document generation and metric calculation on a given file.
 
@@ -626,6 +627,9 @@ def run_uid_pipeline(
         verbose (bool, optional): Defaults to False.
         save_every (int, optional): Controls how many documents are processed 
             before a checkpoint is saved. Defaults to 10.
+        split_results (bool, optional): Save results into fragments to save RAM.
+            Set to True when processing large files where results might not fit 
+            on CPU memory. Defaults to True.
 
     Raises:
         ValueError: _description_
@@ -664,7 +668,7 @@ def run_uid_pipeline(
         for doc_id, sents, og_doc in doc_list:
             sents_pbar = tqdm(
                 total=len(sents),
-                desc=f"Processing {doc_id}",
+                desc=f"Doc #{doc_idx}: {doc_id}",
                 unit="sentences",
                 position=1,
                 leave=verbose
@@ -725,12 +729,24 @@ def run_uid_pipeline(
                         print("Document-level analyses, skipping remaining sentences")
                     break
             sents_pbar.close()
+            doc_idx += 1
             if doc_idx % save_every == 0:
                 if verbose:
                     print(f"Saving checkpoint at {doc_idx + 1} document(s)...")
                 temp_df = pd.DataFrame(rows)
-                temp_df.to_csv(output_dir / (output_file.stem + "_chkpt.csv"))
-            doc_idx += 1
+                chkpt_name = f"{output_file.stem}"
+                if split_results:
+                    rows = []
+                    chkpt_name += f"_{ud_path.stem}_split_{doc_idx // save_every}"
+                else:
+                    chkpt_name += "_chkpt"
+                temp_df.to_csv(output_dir / (chkpt_name + ".csv"))
     print("Done")
-    uid_df = pd.DataFrame(rows)
-    return uid_df
+    if split_results and rows:
+        temp_df = pd.DataFrame(rows)
+        chkpt_name = f"{output_file.stem}_split_{doc_idx // save_every}"
+        temp_df.to_csv(output_dir / (chkpt_name + ".csv"))
+        return None
+    else:
+        uid_df = pd.DataFrame(rows)
+        return uid_df
