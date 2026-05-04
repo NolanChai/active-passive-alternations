@@ -416,7 +416,7 @@ def get_uid_metrics(surprisals,
 
     return {
         "raw_surps": list(surprisals),
-        "raw_uni_surps": list(uni_arr),
+        # "raw_uni_surps": list(uni_arr),
         "surp_mean": mean,
         "surp_slor": slor,
         "uid_std": std,
@@ -710,8 +710,8 @@ def run_uid_pipeline(
                             "doc_id": doc_id,
                             "sent_idx": i,
                             "context": cfg["name"],
-                            "sentence": sent,
-                            "tokens": tokens,
+                            # "sentence": sent,
+                            # "tokens": tokens,
                             "units": units,
                         }
                         row.update(uid_metrics)
