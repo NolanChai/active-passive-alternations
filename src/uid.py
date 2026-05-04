@@ -640,9 +640,13 @@ def run_uid_pipeline(
     print(f"Processing {ud_path}...")
     
     # Fix paths
+    ud_path = Path(ud_path)
     output_dir = output_dir or Path('.')
     output_file = output_file or Path(f'output_{uid_unit}_{uid_level}_uid.csv')
-    
+    if split_results:
+        split_dir = Path(output_dir / ud_path.stem)
+        split_dir.mkdir(exist_ok=True)
+        output_dir = split_dir
     # Generate counterfactual documents if applicable
     docs_gen = iter_docs(ud_path, 
                          gen_cf=generate_counterfactual,
@@ -737,7 +741,7 @@ def run_uid_pipeline(
                 chkpt_name = f"{output_file.stem}"
                 if split_results:
                     rows = []
-                    chkpt_name += f"_{ud_path.stem}_split_{doc_idx // save_every}"
+                    chkpt_name += f"_split_{doc_idx // save_every}"
                 else:
                     chkpt_name += "_chkpt"
                 temp_df.to_csv(output_dir / (chkpt_name + ".csv"))
