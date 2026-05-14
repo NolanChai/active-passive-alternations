@@ -414,9 +414,9 @@ def wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(description='Run analysis scripts for results of active/passive/process data.')
-    parser.add_argument("data_dir", type=str, help="Path to folder containing csv files to process.")
-    parser.add_argument("output_dir", type=str, help="Output directory for plots/results")
-    
+    parser.add_argument("data_dir", type=str, default=None, help="Path to folder containing csv files to process.")
+    parser.add_argument("output_dir", type=str, default=None, help="Output directory for plots/results")
+    parser.add_argument("--uid_df_path", type=str, default=None, help="Path to pre-saved uid_df csv file.")
     
     args, unk = parser.parse_known_args()
     
@@ -446,20 +446,26 @@ def main():
     all_pw_diffs = []
     all_uid_dfs = []
     plot_suffix = ""
-    for idx, data_path in enumerate(data_paths):
-        print("Reading in data from doc %d: %s" % (idx, data_path))
-        # Get dataframes
-        uid_df, plot_suffix = get_uid_df(data_path)
-        all_uid_dfs.append(uid_df)
-        # all_cf_comparisons.append(cf_comparison)
-        # all_pw_diffs.append(pw_diffs)
-        print("Complete")
-        print()
-    
-    # cf_comparison = pd.concat(all_cf_comparisons)
-    # pw_diffs = pd.concat(all_pw_diffs)
-    uid_df = pd.concat(all_uid_dfs)
-    cf_comparison, plot_suffix = get_cf_comparison(uid_df)
+    if args.uid_df_path:
+        uid_df = pd.read_csv(uid_df_path)
+    else:
+        for idx, data_path in enumerate(data_paths):
+            print("Reading in data from doc %d: %s" % (idx, data_path))
+            # Get dataframes
+            uid_df, plot_suffix = get_uid_df(data_path)
+            all_uid_dfs.append(uid_df)
+            # all_cf_comparisons.append(cf_comparison)
+            # all_pw_diffs.append(pw_diffs)
+            print("Complete")
+            print()
+        
+        # cf_comparison = pd.concat(all_cf_comparisons)
+        # pw_diffs = pd.concat(all_pw_diffs)
+        uid_df = pd.concat(all_uid_dfs)
+        uid_unit, uid_level = plot_suffix.split("_")[1:]
+        uid_df.to_csv(output_dir / ("cf_%s_%s.csv" % (uid_unit, uid_level)))
+        
+    cf_comparison = get_cf_comparison(uid_df)
     pw_diffs = get_pw_diffs(cf_comparison)
     cf_comparison.to_csv(output_dir / ("cf_comparison%s.csv" % plot_suffix))
     pw_diffs.to_csv(output_dir / ("pw_diffs%s.csv" % plot_suffix))
