@@ -416,7 +416,7 @@ def get_uid_metrics(surprisals,
 
     return {
         "raw_surps": list(surprisals),
-        "raw_uni_surps": list(uni_arr),
+        # "raw_uni_surps": list(uni_arr),
         "surp_mean": mean,
         "surp_slor": slor,
         "uid_std": std,
@@ -594,7 +594,8 @@ def run_uid_pipeline(
         output_dir=None,
         output_file=None,
         verbose=False,
-        save_every=10
+        save_every=10,
+        split_results=False
     ):
     """ Runs the pipeline of counterfactual document generation and metric calculation on a given file.
 
@@ -626,6 +627,9 @@ def run_uid_pipeline(
         verbose (bool, optional): Defaults to False.
         save_every (int, optional): Controls how many documents are processed 
             before a checkpoint is saved. Defaults to 10.
+        split_results (bool, optional): Save results into fragments to save RAM.
+            Set to True when processing large files where results might not fit 
+            on CPU memory. Defaults to True.
 
     Raises:
         ValueError: _description_
@@ -636,9 +640,13 @@ def run_uid_pipeline(
     print(f"Processing {ud_path}...")
     
     # Fix paths
+    ud_path = Path(ud_path)
     output_dir = output_dir or Path('.')
     output_file = output_file or Path(f'output_{uid_unit}_{uid_level}_uid.csv')
-    
+    if split_results:
+        split_dir = Path(output_dir / ud_path.stem)
+        split_dir.mkdir(exist_ok=True)
+        output_dir = split_dir
     # Generate counterfactual documents if applicable
     docs_gen = iter_docs(ud_path, 
                          gen_cf=generate_counterfactual,
@@ -664,7 +672,7 @@ def run_uid_pipeline(
         for doc_id, sents, og_doc in doc_list:
             sents_pbar = tqdm(
                 total=len(sents),
-                desc=f"Processing {doc_id}",
+                desc=f"Doc #{doc_idx}: {doc_id}",
                 unit="sentences",
                 position=1,
                 leave=verbose
@@ -702,8 +710,8 @@ def run_uid_pipeline(
                             "doc_id": doc_id,
                             "sent_idx": i,
                             "context": cfg["name"],
-                            "sentence": sent,
-                            "tokens": tokens,
+                            # "sentence": sent,
+                            # "tokens": tokens,
                             "units": units,
                         }
                         row.update(uid_metrics)
@@ -725,12 +733,24 @@ def run_uid_pipeline(
                         print("Document-level analyses, skipping remaining sentences")
                     break
             sents_pbar.close()
+            doc_idx += 1
             if doc_idx % save_every == 0:
                 if verbose:
                     print(f"Saving checkpoint at {doc_idx + 1} document(s)...")
                 temp_df = pd.DataFrame(rows)
-                temp_df.to_csv(output_dir / (output_file.stem + "_chkpt.csv"))
-            doc_idx += 1
+                chkpt_name = f"{output_file.stem}"
+                if split_results:
+                    rows = []
+                    chkpt_name += f"_split_{doc_idx // save_every}"
+                else:
+                    chkpt_name += "_chkpt"
+                temp_df.to_csv(output_dir / (chkpt_name + ".csv"))
     print("Done")
-    uid_df = pd.DataFrame(rows)
-    return uid_df
+    if split_results and rows:
+        temp_df = pd.DataFrame(rows)
+        chkpt_name = f"{output_file.stem}_split_{doc_idx // save_every}"
+        temp_df.to_csv(output_dir / (chkpt_name + ".csv"))
+        return None
+    else:
+        uid_df = pd.DataFrame(rows)
+        return uid_df
