@@ -231,9 +231,11 @@ def get_cf_comparison(data_path):
     uid_df['raw_surps'] = uid_df['raw_surps'].apply(str_to_list)
     uid_df['raw_uni_surps'] = uid_df['raw_uni_surps'].apply(str_to_list)
     uid_df['units'] = uid_df['units'].apply(str_to_list)
+    print(uid_df.shape)
+    print(uid_df.columns)
     
     sents_of_interest = uid_df.groupby("doc_name").apply(extract_sents_of_interest).reset_index().drop(columns="level_1")
-
+    print(sents_of_interest.shape)
     cf_comparison = sents_of_interest[sents_of_interest['context'].isin(context_lvls)]#.drop(columns=['raw_surps', 'raw_uni_surps'])
     cf_comparison['factual'] = cf_comparison['factual'] == 'f'
     cf_comparison = cf_comparison.groupby(['doc_id', 'sent_idx', 'context']).first().sort_values(by=['doc_name', 'sent_idx']).reset_index()
