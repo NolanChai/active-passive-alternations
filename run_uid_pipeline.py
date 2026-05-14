@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--output_dir", type=str, default=None, help="(Optional) Output directory")
     parser.add_argument("--output_name", type=str, default="passives_uid_calcs.csv", help="(Optional) Name of output file")
     parser.add_argument("--verbose", action="store_true", help="Set verbosity")
+    parser.add_argument("--save_every", type=int, default=None, help="(Optional) How often to save checkpoints or result splits.")
+    parser.add_argument("--split_results", action="store_true", help="(Optional) Set result split")
     
     args, unk = parser.parse_known_args()
     
@@ -45,7 +47,7 @@ def main():
                 extra_args[key] = value
 
     # Paths
-    UD_paths = Path(args.data_dir).iterdir()
+    UD_paths = Path(args.data_dir).glob('*.conllu')
     output_dir = Path(args.output_dir)
     if not output_dir.exists():
         print(f"{output_dir} does not exist. Making one for you...")
@@ -53,24 +55,53 @@ def main():
     output_file = Path(args.output_name).with_suffix(".csv")
     output_filepath = output_dir / output_file
     
-    
+    # Set up device
+    device = args.device
+    if device is None:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")  # metal for mac
+        else:
+            device = torch.device("cpu")
+    print("Loading model...", end="")
+    tokenizer, model, _ = load_lm(model_name=args.model, device=device)
+    print("Done")
     uid_dfs = []
     for UD_path in UD_paths:
-        uid_df = run_uid_pipeline(
-            UD_path,
-            model_name=args.model,
-            limit_docs=args.limit_docs,
-            limit_sents_per_doc=args.limit_sents_per_doc,
-            context_levels=args.context,
-            generate_counterfactual=args.generate_counterfactual,
-            uid_level=args.uid_level,
-            uid_unit=args.uid_unit,
-            device=args.device,
-            output_dir=output_dir,
-            output_file=output_file,
-            verbose=args.verbose
-        )
-        uid_dfs.append(uid_df)
+        try:
+            uid_df = run_uid_pipeline(
+                ud_path=UD_path,
+                model=model, 
+                tokenizer=tokenizer,
+                limit_docs=args.limit_docs,
+                limit_sents_per_doc=args.limit_sents_per_doc,
+                context_levels=args.context,
+                generate_counterfactual=args.generate_counterfactual,
+                uid_level=args.uid_level,
+                uid_unit=args.uid_unit,
+                device=device,
+                output_dir=output_dir,
+                output_file=output_file,
+                verbose=args.verbose,
+                save_every=args.save_every,
+                split_results=args.split_results,
+            )
+        except Exception as e:
+            print(f"Uncaught error in file {UD_path}:")
+            print(e)
+            print("Skipping...")
+            continue
+        if args.split_results:
+            uid_dfs.append("_") # Add dummy so we can track num of successfulyl processed
+        else:
+            uid_dfs.append(uid_df)
+    print(f"{len(uid_dfs)}/{len(UD_paths)} files successfully processed.")
+    if args.split_results:
+        return
+    if len(uid_dfs) == 0:
+        print("Please check files.")
+        return
     uid_dfs = pd.concat(uid_dfs)
     uid_dfs.to_csv(output_filepath)
     

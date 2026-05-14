@@ -30,6 +30,7 @@ class UnigramLM:
         """
         token_ids = self.tokenizer.encode(text, add_special_tokens=False)
         tokens = self.tokenizer.convert_ids_to_tokens(token_ids)
+        self.model = defaultdict(float)
         
         if uid_unit == "token":
             self._fit_tokens(tokens)
@@ -62,10 +63,12 @@ class UnigramLM:
             if tok in self.tokenizer.all_special_tokens:
                 continue
             elif tok.startswith("Ġ") or tok.startswith("_"):
-                words.append(curr_word)
-                curr_word = tok
+                words.append(curr_word.lower())
+                curr_word = tok.strip("Ġ").strip("_")
             else:
                 curr_word += tok
+        if curr_word:
+            words.append(curr_word.lower())
         return words
     
     def __call__(self, text):
