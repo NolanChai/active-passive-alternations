@@ -217,7 +217,7 @@ def check_proper(s):
 def str_to_list(s):
     return eval(s.replace('\0', ''))
 
-def get_cf_comparison(data_path):
+def get_uid_df(data_path):
     print(" - Building UID dataframe:")
     # Read data 
     uid_df = pd.read_csv(data_path).iloc[:, 1:]
@@ -231,9 +231,11 @@ def get_cf_comparison(data_path):
     uid_df['raw_surps'] = uid_df['raw_surps'].apply(str_to_list)
     uid_df['raw_uni_surps'] = uid_df['raw_uni_surps'].apply(str_to_list)
     uid_df['units'] = uid_df['units'].apply(str_to_list)
-    print(uid_df.shape)
-    print(uid_df.columns)
-    
+    print(" - - Shape:", uid_df.shape)
+    # print(uid_df.columns)
+    return uid_df, plot_suffix
+
+def get_cf_comparison(uid_df):
     sents_of_interest = uid_df.groupby("doc_name").apply(extract_sents_of_interest).reset_index().drop(columns="level_1")
     print(sents_of_interest.shape)
     print(" - Building cf comparison:")
@@ -257,7 +259,7 @@ def get_cf_comparison(data_path):
     standard_scaler = StandardScaler()
     cf_comparison[metrics] = standard_scaler.fit_transform(cf_comparison[metrics])
     
-    return cf_comparison, plot_suffix
+    return cf_comparison
 
 def get_pw_diffs(cf_comparison):
     print(" - Building pw. diffs:")
@@ -442,18 +444,23 @@ def main():
     
     all_cf_comparisons = []
     all_pw_diffs = []
+    all_uid_dfs = []
     plot_suffix = ""
     for idx, data_path in enumerate(data_paths):
         print("Reading in data from doc %d: %s" % (idx, data_path))
         # Get dataframes
-        cf_comparison, plot_suffix = get_cf_comparison(data_path)
-        pw_diffs = get_pw_diffs(cf_comparison)
-        all_cf_comparisons.append(cf_comparison)
-        all_pw_diffs.append(pw_diffs)
+        uid_df, plot_suffix = get_uid_df(data_path)
+        all_uid_dfs.append(uid_df)
+        # all_cf_comparisons.append(cf_comparison)
+        # all_pw_diffs.append(pw_diffs)
         print("Complete")
         print()
-    cf_comparison = pd.concat(all_cf_comparisons)
-    pw_diffs = pd.concat(all_pw_diffs)
+    
+    # cf_comparison = pd.concat(all_cf_comparisons)
+    # pw_diffs = pd.concat(all_pw_diffs)
+    uid_df = pd.concat(all_uid_dfs)
+    cf_comparison, plot_suffix = get_cf_comparison(uid_df)
+    pw_diffs = get_pw_diffs(cf_comparison)
     cf_comparison.to_csv(output_dir / ("cf_comparison%s.csv" % plot_suffix))
     pw_diffs.to_csv(output_dir / ("pw_diffs%s.csv" % plot_suffix))
     
