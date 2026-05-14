@@ -239,7 +239,7 @@ def get_cf_comparison(data_path):
     cf_comparison = cf_comparison.groupby(['doc_id', 'sent_idx', 'context']).first().sort_values(by=['doc_name', 'sent_idx']).reset_index()
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).filter(lambda g: g.shape[0] >= len(context_lvls) * 2)
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).apply(check_passive).reset_index()
-    cf_comparison['conversion'] = cf_comparison.apply(check_conversion, axis=1)
+    cf_comparison['conversion'] = cf_comparison['conversion'].apply(check_conversion, axis=1)
     
     print(" - - Processing Agent Prop:")
     cf_comparison['agent_is_prop'] = cf_comparison['agent'].apply(check_proper)
