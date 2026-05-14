@@ -11,6 +11,8 @@ from sklearn.preprocessing import StandardScaler
 from IPython.display import Markdown, display
 # from src.uid import *
 from tqdm import tqdm
+import nltk
+nltk.download('averaged_perceptron_tagger')
 from nltk.tag import pos_tag
 
 # import stanza
