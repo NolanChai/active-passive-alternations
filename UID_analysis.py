@@ -218,7 +218,7 @@ def str_to_list(s):
     return eval(s.replace('\0', ''))
 
 def get_cf_comparison(data_path):
-    print(" - Building cf comparison:")
+    print(" - Building UID dataframe:")
     # Read data 
     uid_df = pd.read_csv(data_path).iloc[:, 1:]
     _, uid_unit, uid_level = Path(data_path).stem.split("_")[:3]
@@ -236,10 +236,14 @@ def get_cf_comparison(data_path):
     
     sents_of_interest = uid_df.groupby("doc_name").apply(extract_sents_of_interest).reset_index().drop(columns="level_1")
     print(sents_of_interest.shape)
+    print(" - Building cf comparison:")
     cf_comparison = sents_of_interest[sents_of_interest['context'].isin(context_lvls)]#.drop(columns=['raw_surps', 'raw_uni_surps'])
+    print(cf_comparison.shape)
     cf_comparison['factual'] = cf_comparison['factual'] == 'f'
     cf_comparison = cf_comparison.groupby(['doc_id', 'sent_idx', 'context']).first().sort_values(by=['doc_name', 'sent_idx']).reset_index()
+    print(cf_comparison.shape)
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).filter(lambda g: g.shape[0] >= len(context_lvls) * 2)
+    print(cf_comparison.shape)
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).apply(check_passive).reset_index()
     print(cf_comparison.shape)
     print(cf_comparison.apply(check_conversion, axis=1).shape)
