@@ -8,11 +8,6 @@ import torch
 from conllu import parse, parse_incr
 from tqdm import tqdm
 import stanza
-stanza.download('en')
-nlp = stanza.Pipeline(
-    lang="en",
-    processors="tokenize,mwt,pos,lemma,depparse"
-)
 
 from src.units import Document, Sentence, Word, PassiveSentence, ActiveSentence
 from src.unigram import UnigramLM
@@ -633,6 +628,11 @@ def run_uid_pipeline(
     Returns:
         _type_: _description_
     """
+    stanza.download('en')
+    nlp = stanza.Pipeline(
+        lang="en",
+        processors="tokenize,mwt,pos,lemma,depparse"
+    )
     print(f"Processing {ud_path}...")
     
     # Fix paths

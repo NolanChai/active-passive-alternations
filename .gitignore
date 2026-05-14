@@ -22,3 +22,7 @@ outputs/*
 
 # Plots/analysis outputs
 plots/*
+
+# testing dir
+temp/*
+test_dataset.sh
