@@ -119,7 +119,7 @@ sns.set(rc={
 plt.rcParams.update({
     "text.usetex": False,
     "font.family": "serif",
-    "font.serif": "Times",
+    "font.serif": "DejaVu Serif",
 })
 
 save_kwargs = {
