@@ -925,7 +925,7 @@ def main():
     
     pw_diffs_regression = get_pw_diffs_regression(cf_comparison)
     
-    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs)
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression)
     logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
                                     output_dir, plot_suffix)
     random_forest_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
