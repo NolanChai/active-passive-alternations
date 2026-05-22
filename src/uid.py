@@ -733,18 +733,18 @@ def run_uid_pipeline(
                         print("Document-level analyses, skipping remaining sentences")
                     break
             sents_pbar.close()
-            doc_idx += 1
-            if doc_idx % save_every == 0:
-                if verbose:
-                    print(f"Saving checkpoint at {doc_idx + 1} document(s)...")
-                temp_df = pd.DataFrame(rows)
-                chkpt_name = f"{output_file.stem}"
-                if split_results:
-                    rows = []
-                    chkpt_name += f"_split_{doc_idx // save_every}"
-                else:
-                    chkpt_name += "_chkpt"
-                temp_df.to_csv(output_dir / (chkpt_name + ".csv"))
+        doc_idx += 1
+        if doc_idx % save_every == 0:
+            if verbose:
+                print(f"Saving checkpoint at {doc_idx + 1} document(s)...")
+            temp_df = pd.DataFrame(rows)
+            chkpt_name = f"{output_file.stem}"
+            if split_results:
+                rows = []
+                chkpt_name += f"_split_{doc_idx // save_every}"
+            else:
+                chkpt_name += "_chkpt"
+            temp_df.to_csv(output_dir / (chkpt_name + ".csv"))
     print("Done")
     if split_results and rows:
         temp_df = pd.DataFrame(rows)
