@@ -643,6 +643,7 @@ def setup_regression_data(pw_diffs,
         X = pd.concat([X.iloc[sampled_passive], X.iloc[sampled_active]]).reset_index(drop=True)
         y = pd.concat([y.iloc[sampled_passive], y.iloc[sampled_active]]).reset_index(drop=True)
         
+    X = X.replace([-np.inf], np.nan).fillna(np.log(1e-10))
     X = sm.add_constant(X, has_constant='add')
     X = X.astype(np.float64)
     y = y.astype(np.float64)
