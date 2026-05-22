@@ -887,7 +887,7 @@ def main():
     if args.uid_df_path:
         print("Reading in data from file %s" % args.uid_df_path)
         uid_df = pd.read_csv(args.uid_df_path)
-        uid_unit, uid_level = args.uid_df_path.split("_")[1:3]
+        uid_unit, uid_level = Path(args.uid_df_path).stem.split("_")[1:3]
         plot_suffix=("_%s_%s" % (uid_unit, uid_level))
     else:
         for idx, data_path in enumerate(data_paths):
