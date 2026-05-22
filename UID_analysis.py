@@ -929,6 +929,20 @@ def main():
     X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression)
     logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
                                     output_dir, plot_suffix)
+    
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            use_ling=False)
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, ("_no_baseline" + plot_suffix))
+    
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            use_surp=False)
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, ("_no_SLOR" + plot_suffix))
+    
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression)
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, plot_suffix)
     random_forest_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
                                     output_dir, plot_suffix, cp_plots=True)
     
