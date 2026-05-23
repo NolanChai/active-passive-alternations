@@ -44,7 +44,7 @@ warnings.filterwarnings("ignore")
 
 # === Constants === #
 
-context_lvls = ['document']
+context_lvls = ['document', 'sentence']
 
 #=== Metrics & Features ===#
 
@@ -483,13 +483,16 @@ def get_pw_diffs_regression(cf_comparison):
     pw_diffs = pw_diffs.reset_index(drop=True)
     return pw_diffs
 
-def plot_f_v_cf(cf_comparison, plot_suffix, output_dir):
+def plot_f_v_cf(cf_comparison, plot_suffix, output_dir, context=None):
+    context = context or context_lvls[0]
+    print("Plotting f v. cf with %s context" % context)
     fig, axs = plt.subplots(1, 2, figsize=(10.5, 5), sharey=True, width_ratios=[1, 2])
     hue_order = [True, False]
     uid_unit, uid_level = plot_suffix.split("_")[1:]
     # surp metrics
+    df = cf_comparison[cf_comparison['context']==context]
     sns.boxenplot(
-        data=cf_comparison.melt(
+        data=df.melt(
             id_vars=['factual'],
             value_vars=surprisal_metric_names,
             var_name='Metric',
@@ -506,7 +509,7 @@ def plot_f_v_cf(cf_comparison, plot_suffix, output_dir):
     # axs[0].get_legend().remove()
 
     # uid metrics
-    sns.boxenplot(data=cf_comparison.melt(
+    sns.boxenplot(data=df.melt(
         id_vars=['factual'],
         value_vars=uid_metric_names,
         var_name='Metric',
@@ -522,17 +525,20 @@ def plot_f_v_cf(cf_comparison, plot_suffix, output_dir):
     axs[1].get_legend().remove()
 
     # entire plot
-    plt.suptitle(f"Factual vs. Counterfactual\n(Context={' or '.join(context_lvls)}, Unit={uid_unit}, Level={uid_level})")
+    plt.suptitle(f"Factual vs. Counterfactual\n(Context={context}, Unit={uid_unit}, Level={uid_level})")
     plt.tight_layout()
-    fig.savefig(output_dir / ("fact_cfact_metrics%s" % plot_suffix),
+    fig.savefig(output_dir / ("fact_cfact_metrics_%s%s" % (context, plot_suffix)),
                 **save_kwargs)
 
-def plot_diffs(pw_diffs, plot_suffix, output_dir):
+def plot_diffs(pw_diffs, plot_suffix, output_dir, context='document'):
+    context = context or context_lvls[0]
+    print("Plotting f v. cf with %s context" % context)
     uid_unit, uid_level = plot_suffix.split("_")[1:]
     fig, axs = plt.subplots(1, 2, figsize=(8, 3.5), sharey=True, width_ratios=[1, 2])
     # surp metrics
-    sns.boxplot((pw_diffs.loc[
-                (pw_diffs['uid_len'] > -5) & (pw_diffs['uid_len'] < 5),
+    df = pw_diffs[pw_diffs['context']==context]
+    sns.boxplot((df.loc[
+                (df['uid_len'] > -5) & (df['uid_len'] < 5),
                 # :,
                 ['doc_name', 'sent_idx', 'conversion', 'context'] + surprisal_metric_names]
                 .melt(id_vars=['doc_name', 'sent_idx', 'conversion', 'context'])), 
@@ -556,7 +562,7 @@ def plot_diffs(pw_diffs, plot_suffix, output_dir):
     axs[0].set_xticks(ticks=surprisal_metric_names, labels=surprisal_metrics_formatted)
 
     # uid metrics
-    sns.boxplot((pw_diffs[['doc_name', 'sent_idx', 'conversion', 'context'] + uid_metric_names]
+    sns.boxplot((df[['doc_name', 'sent_idx', 'conversion', 'context'] + uid_metric_names]
                 .melt(id_vars=['doc_name', 'sent_idx', 'conversion', 'context'])), 
                 y='value', x='variable', 
                 # color=conversion_cmap['Both'],
@@ -580,10 +586,12 @@ def plot_diffs(pw_diffs, plot_suffix, output_dir):
     # full plot
     # plt.suptitle(f"Pairwise Differences (Counterfactual - Factual)")
     plt.tight_layout()
-    plt.savefig(output_dir / ("pw_diffs_context%s" % plot_suffix),
+    plt.savefig(output_dir / ("pw_diffs_%s%s" % (context, plot_suffix)),
                 **save_kwargs)
     
-def wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir):
+def wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir, context=None):
+    context = context or context_lvls[0]
+    print("Running wilcoxon test with %s context" % context)
     results = []
     for conv in ['P to A', 'A to P']:
         for metric in metrics:
@@ -607,7 +615,7 @@ def wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir):
                 'Wilcoxon P-val': wilcoxon_res.pvalue
             })
     results = pd.DataFrame(results)
-    results.to_csv(output_dir / ("wilcox_res%s.csv" % plot_suffix))
+    results.to_csv(output_dir / ("wilcox_res_%s%s.csv" % (context, plot_suffix)))
     
 def setup_regression_data(pw_diffs, 
                           bootstrap=False, 
@@ -615,15 +623,28 @@ def setup_regression_data(pw_diffs,
                           test_size=0.2,
                           use_ling=True,
                           use_uid=True,
-                          use_surp=True):
+                          use_surp=True,
+                          context=None,
+                          override_features=[]):
+    context = context or context_lvls[0]
+    print("Building datasets with %s context" % context)
     assert use_ling or use_uid or use_surp, "No data chosen"
+    if override_features:
+        use_uid=False
+        use_surp=False
     # define features, target, and naive baseline
-    X = pw_diffs[[]
+    X = pw_diffs.loc[
+        pw_diffs['context']==context,
+        []
         + (ling_features if use_ling else [])
         + (uid_features if use_uid else [])
         + (surp_features if use_surp else [])
+        + override_features
         ]
-    y = pw_diffs['passive']
+    y = pw_diffs.loc[
+        pw_diffs['context']==context,
+        'passive'
+    ]
 
     # bootstrap to resolve class imbalance
     if bootstrap:
@@ -688,7 +709,7 @@ def logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naiv
     ci.columns = ['2.5%', '97.5%']
     ci['coef'] = logreg.params
     ci = ci.reset_index().rename(columns={'index': 'feature'})
-    ci.to_csv(output_dir / ("lr_model_params" + plot_suffix + ".csv"))
+    ci.to_csv(output_dir / ("lr_model_params%s.csv" % plot_suffix))
     # ci = ci[ci['feature'] != 'Intercept']
     fig = plt.figure(figsize=(8, 6))
     sns.scatterplot(x=ci['coef'], y=ci['feature'], 
@@ -708,7 +729,7 @@ def logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naiv
     )
     plt.tight_layout()
     create_legend(feature_legend_cmap)
-    fig.savefig(output_dir / ("modeling_logreg_coeffs" + plot_suffix),
+    fig.savefig(output_dir / ("modeling_logreg_coeffs%s" % plot_suffix),
                 dpi=100, bbox_inches='tight', transparent=True)
     
     logreg_skl = LogisticRegression()
@@ -751,7 +772,7 @@ def logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naiv
                 axs[i].get_legend().remove()
         fig.suptitle("Ceteris Paribus Plots (Logistic)")
         fig.tight_layout()
-        fig.savefig(output_dir / ("cp_logreg" + plot_suffix),
+        fig.savefig(output_dir / ("cp_logreg%s" % plot_suffix),
                     **save_kwargs)
     return logreg
 
@@ -798,7 +819,7 @@ def random_forest_experiments(X, y, X_train, X_test, y_train, y_test, naive_base
         ax.spines[spine].set_visible(False)
     create_legend(feature_legend_cmap)
     plt.title(f"Feature Importance across {n_trials} RF Models")
-    fig.savefig(output_dir / ("rf_feat_importance" + plot_suffix),
+    fig.savefig(output_dir / ("rf_feat_importance%s" % plot_suffix),
                 **save_kwargs)
 
     # CP Plot
@@ -838,7 +859,7 @@ def random_forest_experiments(X, y, X_train, X_test, y_train, y_test, naive_base
                 axs[i].get_legend().remove()
         fig.suptitle("Avg. Ceteris Paribus Plots for All Observations")
         fig.tight_layout()
-        fig.savefig(output_dir / ("cp_rf" + plot_suffix),
+        fig.savefig(output_dir / ("cp_rf%s" % plot_suffix),
                     **save_kwargs)
     return rf
     
@@ -846,7 +867,7 @@ def save_logreg(logreg, output_dir, plot_suffix):
     model = logreg.conf_int()
     model.columns = ['2.5%', '97.5%']
     model['coef'] = logreg.params
-    model.to_csv(output_dir / "lr_model_params" + plot_suffix + ".csv")
+    model.to_csv(output_dir / "lr_model_params%s.csv" % plot_suffix)
 
 
 def main():
@@ -926,25 +947,43 @@ def main():
     
     pw_diffs_regression = get_pw_diffs_regression(cf_comparison)
     
+    
+    # == UID FEATURE COMPARISON == #
+    # = Surp. STD = #
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            override_features=['uid_std'])
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, ("_uid_std" + plot_suffix))
+    # = Local Var. = # 
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            override_features=['uid_pwd'])
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, ("_uid_pwd" + plot_suffix))
+    # = -SLOR = #
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            override_features=['surp_slor'])
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, ("_surp_slor" + plot_suffix))
+    
+    # == CONTEXT LEVEL COMPARISON == #
+    # = with context = #
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            use_ling=False,
+                                                                                            context='document')
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, ("_context" + plot_suffix))
+    # w/o context
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            use_ling=False,
+                                                                                            context='sentence')
+    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+                                    output_dir, ("_no_context" + plot_suffix))
+    # == FULL MODEL == #
     X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression)
     logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
-                                    output_dir, plot_suffix)
-    
-    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
-                                                                                            use_ling=False)
-    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
-                                    output_dir, ("_no_baseline" + plot_suffix))
-    
-    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
-                                                                                            use_surp=False)
-    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
-                                    output_dir, ("_no_SLOR" + plot_suffix))
-    
-    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression)
-    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
-                                    output_dir, plot_suffix)
+                                    output_dir, ("_full" + plot_suffix))
     random_forest_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
-                                    output_dir, plot_suffix, cp_plots=True)
+                                output_dir, plot_suffix, cp_plots=False)
     
     print("N factual:", len(cf_comparison['doc_name'].unique()))
     print(cf_comparison['factual'].value_counts())
