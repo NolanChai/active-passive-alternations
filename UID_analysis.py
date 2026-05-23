@@ -21,7 +21,7 @@ from tqdm import tqdm
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix, accuracy_score, roc_curve, roc_auc_score
+from sklearn.metrics import confusion_matrix, accuracy_score, roc_curve, roc_auc_score, log_loss
 import statsmodels.api as sm
 SEED = 17776
 
@@ -332,21 +332,33 @@ def evaluate_model(model, X, y, plot=None, output_dir=None, plot_suffix=None):
     # fpr, tpr, thresh = roc_curve(y, y_score)
     roc_auc = roc_auc_score(y, y_score)
     acc = accuracy_score(y, y_pred)
+    naive = max(np.mean(y), np.mean(1 - np.array(y)))
+    log_likelihood = -log_loss(y, y_score, normalize=False)
     act_acc = cm[0][0] / (cm[0][0] + cm[0][1])
     pass_acc = cm[1][1] / (cm[1][0] + cm[1][1])
     macro_acc = (act_acc + pass_acc) / 2
 
+    print("Naive Acc: %.4f" % naive)
     print("Accuracy: %.4f" % acc)
     print("Macro Acc: %.4f" % macro_acc)
     print("ROC-AUC: %.4f" % roc_auc)
+    print("Log like.: %.4f" % log_likelihood)
     if plot is not None:
         fig, axs = plt.subplots()
         sns.heatmap(cm, annot=True, ax=axs)
         plt.ylabel("Actual")
         plt.xlabel("Predicted")
         plt.title("Confusion Matrix")
-        fig.savefig(output_dir / (plot + plot_suffix),
+        fig.savefig(output_dir / ("%s_test_cm%s" % (plot, plot_suffix)),
                     **save_kwargs)
+        results_file = output_dir / ("%s_test_results%s.txt" % (plot, plot_suffix))
+        with open(results_file, 'w') as outfile:
+            outfile.writelines(["Naive Acc: %.4f\n" % naive,
+                "Accuracy: %.4f\n" % acc,
+                "Macro Acc: %.4f\n" % macro_acc,
+                "ROC-AUC: %.4f\n" % roc_auc,
+                "Log like.: %.4f\n" % log_likelihood,
+            ])
     
     return cm, roc_auc, acc
 
@@ -702,7 +714,7 @@ def logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naiv
     evaluate_model(logreg, X_train, y_train)
     print(" - - Test metrics:")
     evaluate_model(logreg, X_test, y_test, 
-                   plot="lr_test_cm", 
+                   plot="lr", 
                    output_dir=output_dir, plot_suffix=plot_suffix)
     
     # Plots confidence intervals for coefficients from statsmodels
@@ -800,7 +812,7 @@ def random_forest_experiments(X, y, X_train, X_test, y_train, y_test, naive_base
     print("=" * 10)
     print("Test metrics:")
     evaluate_model(rf, X_test, y_test,
-                   plot="rf_test_cm", 
+                   plot="rf", 
                    output_dir=output_dir, plot_suffix=plot_suffix)
     
     # Importance plot
