@@ -438,7 +438,7 @@ def get_cf_comparison(uid_df):
     return cf_comparison
 
 def get_pw_diffs(cf_comparison):
-    print(" - Building pw. diffs:")
+    print("Building pw. diffs:")
     get_diff = lambda s: s.diff().iloc[1]
     get_diff_flipped = lambda s: -s.diff().iloc[1]
     agg_map = dict(zip(metrics + ['uid_len'], [get_diff] * (len(metrics) + 1)))
@@ -461,6 +461,7 @@ def get_pw_diffs(cf_comparison):
     return pw_diffs
 
 def get_pw_diffs_regression(cf_comparison):
+    print("Building regression pw diffs")
     # take pairwise differences, but *Active - Passive*
     get_diff = lambda s: s.diff().iloc[1]
     pass_through = lambda s: s.iloc[0]
@@ -532,7 +533,7 @@ def plot_f_v_cf(cf_comparison, plot_suffix, output_dir, context=None):
 
 def plot_diffs(pw_diffs, plot_suffix, output_dir, context='document'):
     context = context or context_lvls[0]
-    print("Plotting f v. cf with %s context" % context)
+    print("Plotting pw diffs with %s context" % context)
     uid_unit, uid_level = plot_suffix.split("_")[1:]
     fig, axs = plt.subplots(1, 2, figsize=(8, 3.5), sharey=True, width_ratios=[1, 2])
     # surp metrics
@@ -877,6 +878,7 @@ def main():
     parser.add_argument("--uid_df_path", type=str, default=None, help="Path to pre-saved uid_df csv file.")
     parser.add_argument("--cf_comparison_path", type=str, default=None, help="Path to pre-saved cf_comparison csv file.")
     parser.add_argument("--pw_diffs_path", type=str, default=None, help="Path to pre-saved pw_diffs csv file.")
+    parser.add_argument("--pw_diffs_reg_path", type=str, default=None, help="Path to pre-saved pw_diffs csv file for regression.")
     
     args, unk = parser.parse_known_args()
     
@@ -945,7 +947,11 @@ def main():
     plot_diffs(pw_diffs, plot_suffix, output_dir)
     wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir)
     
-    pw_diffs_regression = get_pw_diffs_regression(cf_comparison)
+    if args.pw_diffs_reg_path:
+        pw_diffs_regression = pd.read_csv(args.pw_diffs_reg_path)
+    else:
+        pw_diffs_regression = get_pw_diffs_regression(cf_comparison)
+        pw_diffs_regression.to_csv(output_dir / ("pw_diffs_reg%s.csv" % plot_suffix))
     
     
     # == UID FEATURE COMPARISON == #
