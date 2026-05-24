@@ -49,29 +49,29 @@ context_lvls = ['document', 'sentence']
 #=== Metrics & Features ===#
 
 surprisal_metric_names = [
-    'surp_mean', # Mean surprisal
+    # 'surp_mean', # Mean surprisal
     'surp_slor', # SLOR
 ]
 
 uid_metric_names = [
     'uid_std', # Std. of surprisal
-    'uid_mad', # mean avg. deviation of surprisal
+    # 'uid_mad', # mean avg. deviation of surprisal
     'uid_pwd', # Local variance (pairwise euc. distance)
-    'uid_range', # Range of surprisal
+    # 'uid_range', # Range of surprisal
     # 'uid_len' # Length of sentence (units)
     # 'uid_slope', # Slope of a linear function fit to surp values
 ]
 
 surprisal_metrics_formatted = [
-    'Mean Surp.',
+    # 'Mean Surp.',
     '-SLOR',
 ]
 
 uid_metrics_formatted = [
     'Surp. STD',
-    'Surp. MAD',
+    # 'Surp. MAD',
     'Local Var.',
-    'Surp. Range',
+    # 'Surp. Range',
     # 'Length',
     # 'LinReg Slope',
 ]
