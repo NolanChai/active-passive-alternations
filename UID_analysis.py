@@ -958,6 +958,9 @@ def main():
     plot_f_v_cf(cf_comparison, plot_suffix, output_dir)
     plot_diffs(pw_diffs, plot_suffix, output_dir)
     wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir)
+    plot_diffs(pw_diffs, plot_suffix, output_dir, context='sentence')
+    wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir, context='sentence')
+    
     
     if args.pw_diffs_reg_path:
         pw_diffs_regression = pd.read_csv(args.pw_diffs_reg_path)
