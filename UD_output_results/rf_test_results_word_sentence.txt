@@ -1,0 +1,5 @@
+Naive Acc: 0.9581
+Accuracy: 0.9766
+Macro Acc: 0.7628
+ROC-AUC: 0.7628
+Log like.: -1369.6588
