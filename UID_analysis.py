@@ -606,9 +606,10 @@ def wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir, context=None
     context = context or context_lvls[0]
     print("Running wilcoxon test with %s context" % context)
     results = []
+    df = pw_diffs[pw_diffs['context'] == context]
     for conv in ['P to A', 'A to P']:
         for metric in metrics:
-            metric_diffs = pw_diffs.loc[pw_diffs['conversion']==conv, metric]
+            metric_diffs = df.loc[df['conversion']==conv, metric]
             # normal_res = normaltest(metric_diffs)
             factuals = cf_comparison.loc[cf_comparison['factual'] 
                                         & (cf_comparison['conversion']==conv)]
