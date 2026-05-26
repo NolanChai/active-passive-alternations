@@ -607,14 +607,15 @@ def wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir, context=None
     print("Running wilcoxon test with %s context" % context)
     results = []
     df = pw_diffs[pw_diffs['context'] == context]
+    cf_comp = cf_comparison[cf_comparison['context'] == context]
     for conv in ['P to A', 'A to P']:
         for metric in metrics:
             metric_diffs = df.loc[df['conversion']==conv, metric]
             # normal_res = normaltest(metric_diffs)
-            factuals = cf_comparison.loc[cf_comparison['factual'] 
-                                        & (cf_comparison['conversion']==conv)]
-            cfactuals = cf_comparison.loc[~cf_comparison['factual']
-                                        & (cf_comparison['conversion']==conv)]
+            factuals = cf_comp.loc[cf_comp['factual'] 
+                                        & (cf_comp['conversion']==conv)]
+            cfactuals = cf_comp.loc[~cf_comp['factual']
+                                        & (cf_comp['conversion']==conv)]
             N = cfactuals.shape[0]
             wilcoxon_res = wilcoxon(factuals[metric], cfactuals[metric],
                                 alternative="less", method='asymptotic'
