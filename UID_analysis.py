@@ -22,6 +22,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score, roc_curve, roc_auc_score, log_loss
+from sklearn.utils.class_weight import compute_class_weight
 import statsmodels.api as sm
 SEED = 17776
 
@@ -44,7 +45,11 @@ warnings.filterwarnings("ignore")
 
 # === Constants === #
 
-context_lvls = ['document', 'sentence']
+# context_lvls = ['document', 'sentence']
+context_lvls= ['document']
+BOOTSTRAP = False
+RESAMPLE = False
+CLASS_WEIGHTS = 'balanced'
 
 #=== Metrics & Features ===#
 
@@ -60,7 +65,7 @@ uid_metric_names = [
     # 'uid_range', # Range of surprisal
     # 'uid_len' # Length of sentence (units)
     # 'uid_slope', # Slope of a linear function fit to surp values
-]
+] 
 
 surprisal_metrics_formatted = [
     # 'Mean Surp.',
@@ -395,6 +400,10 @@ def cp_plot_single(data, feature, observation, model, grid_size=100):
         
     return feature_range, cp_predictions
 
+def check_grammatical(classifier, s):
+    result = classifier(s)[0]
+    return result['label'] == 'LABEL_1'
+
 def get_uid_df(data_path):
     print(" - Building UID dataframe:")
     # Read data 
@@ -417,15 +426,30 @@ def get_cf_comparison(uid_df):
     sents_of_interest = uid_df.groupby("doc_name").apply(extract_sents_of_interest).reset_index().drop(columns="level_1")
     # print(sents_of_interest.shape)
     print(" - Building cf comparison:")
+    # TEMPORARY
+    from transformers import pipeline
+    classifier = pipeline(
+        "text-classification",
+        model="textattack/roberta-base-CoLA"
+    )
     cf_comparison = sents_of_interest[sents_of_interest['context'].isin(context_lvls)]#.drop(columns=['raw_surps', 'raw_uni_surps'])
-    # print(cf_comparison.shape)
+    print(cf_comparison.shape)
     cf_comparison['factual'] = cf_comparison['factual'] == 'f'
     cf_comparison = cf_comparison.groupby(['doc_id', 'sent_idx', 'context']).first().sort_values(by=['doc_name', 'sent_idx']).reset_index()
-    # print(cf_comparison.shape)
+    print(cf_comparison.shape)
+    # TEMPORARY SUBSAMPLE
+    cf_comparison['sent_id_unique'] = cf_comparison['doc_name'] + cf_comparison['sent_idx'].astype(str) + cf_comparison['context']
+    np.random.seed(42)
+    sent_id_sample = np.random.choice(cf_comparison['sent_id_unique'], 10000, replace=False)
+    print(len(sent_id_sample))
+    cf_comparison = cf_comparison[cf_comparison['sent_id_unique'].isin(sent_id_sample)]
+    print(cf_comparison.shape)
+    cf_comparison = cf_comparison[[check_grammatical(classifier, sentence) for sentence in cf_comparison['sentence']]]
+    print(cf_comparison.shape)
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).filter(lambda g: g.shape[0] >= len(context_lvls) * 2)
     # print(cf_comparison.shape)
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).apply(check_passive).reset_index()
-    # print(cf_comparison.shape)
+    print(cf_comparison.shape)
     # print(cf_comparison.apply(check_conversion, axis=1).shape)
     cf_comparison['conversion'] = cf_comparison.apply(check_conversion, axis=1)
     
@@ -446,7 +470,7 @@ def get_cf_comparison(uid_df):
                         + metrics)
     
     cf_comparison[to_standardize] = standard_scaler.fit_transform(cf_comparison[to_standardize])
-    
+    # cf_comparison = cf_comparison[cf_comparison["sent_idx"]>0]
     return cf_comparison
 
 def get_pw_diffs(cf_comparison):
@@ -710,7 +734,19 @@ def plot_feature_corr(X, plot_suffix, output_dir, plot_title="modeling_feat_corr
 def logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy,
                                     output_dir, plot_suffix, cp_plots=False):
     print(" - Running Logistic Regression Model experiments")
-    logreg = sm.Logit(y_train, X_train).fit()
+    if CLASS_WEIGHTS == None:
+        logreg = sm.Logit(y_train, X_train).fit()
+    else:
+        unique_classes = np.unique(y_train)
+        weights = compute_class_weight(class_weight="balanced", classes=unique_classes, y=y_train)
+        class_weights_dict = dict(zip(unique_classes, weights))
+        sample_weights = np.array([class_weights_dict[c] for c in y_train])
+        logreg = sm.GLM(
+            y_train, 
+            X_train, 
+            family=sm.families.Binomial(link=sm.families.links.Logit()), 
+            freq_weights=sample_weights
+        ).fit()
     print(" - - Naive baseline accuracy: %.4f" % naive_baseline_accuracy)
     print(" - - Training metrics:")
     evaluate_model(logreg, X_train, y_train)
@@ -747,7 +783,7 @@ def logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naiv
     fig.savefig(output_dir / ("modeling_logreg_coeffs%s" % plot_suffix),
                 dpi=100, bbox_inches='tight', transparent=True)
     
-    logreg_skl = LogisticRegression()
+    logreg_skl = LogisticRegression(class_weight=CLASS_WEIGHTS)
     logreg_skl.fit(X_train, y_train)
     
     # CP plots
@@ -945,12 +981,12 @@ def main():
         csv_path = output_dir / ("cf_%s_%s_uid_full.csv" % (uid_unit, uid_level))
         uid_df.to_csv(csv_path)
         print(f"Data saved to {csv_path}")
+    
     if args.cf_comparison_path:
         cf_comparison = pd.read_csv(args.cf_comparison_path)
     else:
         cf_comparison = get_cf_comparison(uid_df)
         cf_comparison.to_csv(output_dir / ("cf_comparison%s.csv" % plot_suffix))
-        
     if args.pw_diffs_path:
         pw_diffs = pd.read_csv(args.pw_diffs_path)
     else:
@@ -960,8 +996,9 @@ def main():
     plot_f_v_cf(cf_comparison, plot_suffix, output_dir)
     plot_diffs(pw_diffs, plot_suffix, output_dir)
     wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir)
-    plot_diffs(pw_diffs, plot_suffix, output_dir, context='sentence')
-    wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir, context='sentence')
+    if 'sentence' in context_lvls:
+        plot_diffs(pw_diffs, plot_suffix, output_dir, context='sentence')
+        wilcoxon_test(pw_diffs, cf_comparison, plot_suffix, output_dir, context='sentence')
     
     
     if args.pw_diffs_reg_path:
@@ -991,18 +1028,24 @@ def main():
     # == CONTEXT LEVEL COMPARISON == #
     # = with context = #
     X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            bootstrap=BOOTSTRAP, 
+                                                                                            resample=RESAMPLE,
                                                                                             use_ling=False,
                                                                                             context='document')
     logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
                                     output_dir, ("_context" + plot_suffix))
     # w/o context
     X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            bootstrap=BOOTSTRAP,
+                                                                                            resample=RESAMPLE,
                                                                                             use_ling=False,
                                                                                             context='sentence')
     logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
                                     output_dir, ("_no_context" + plot_suffix))
     # == FULL MODEL == #
-    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression)
+    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+                                                                                            bootstrap=BOOTSTRAP,
+                                                                                            resample=RESAMPLE)
     logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
                                     output_dir, ("_full" + plot_suffix))
     random_forest_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 

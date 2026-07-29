@@ -12,7 +12,10 @@ import stanza
 from src.units import Document, Sentence, Word, PassiveSentence, ActiveSentence
 from src.unigram import UnigramLM
 from src.utils import *
-
+nlp = stanza.Pipeline(
+        lang="en",
+        processors="tokenize,mwt,pos,lemma,depparse"
+    )
 # moved from UID.ipynb -- will clean up soon
 
 # UID Pipeline
