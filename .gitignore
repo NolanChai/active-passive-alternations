@@ -13,7 +13,7 @@ wheels/
 .venv
 
 # Data
-data/*
+# data/* Removed as templates now live in data folder
 *.conllu
 outputs/*
 
