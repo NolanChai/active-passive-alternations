@@ -29,7 +29,7 @@ def generate_variants(template,
         _type_: _description_
     """
     result = []
-    sentence = replace_map(template, {"<AGT>": agent, "<PNT>": patient, "<CTL>": control2})
+    text = replace_map(template, {"<AGT>": agent, "<PNT>": patient, "<CTL>": control2})
     for noun in [agent, patient, control1]:
         result.append({
             "patient": patient,
@@ -39,6 +39,6 @@ def generate_variants(template,
             "subject": patient if passive else agent,
             "object": agent if passive else patient,
             "given": noun,
-            "sentence": sentence.replace("<PRE>", noun)
+            "text": text.replace("<PRE>", noun)
         })
     return pd.DataFrame(result)
