@@ -2,6 +2,15 @@ import pandas as pd
 from itertools import permutations
 import numpy as np
 import torch
+from itertools import permutations
+import nltk
+nltk.download("names")
+from nltk.corpus import names
+from pathlib import Path
+from tqdm import tqdm
+
+from uid import *
+from unigram import UnigramLM
 
 def replace_map(string, mapping):
     for key, value in mapping.items():
@@ -99,3 +108,47 @@ def process_results(model, tokenizer, device, variants, save_results_to_file=Tru
     if save_results_to_file:
         uid_results.to_csv("uid_results.csv", index=False)
     return uid_results
+
+if __name__ == "__main__":
+    template_file = "./data/templates/coherent_discourse_pairs_500.csv"
+    output_dir = "."
+    output_file = "uid_results.csv"
+
+    # Load model
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")  # metal for mac
+    else:
+        device = torch.device("cpu")
+    print(f"Loading model on {device}...", end="")
+    tokenizer, model, _ = load_lm(model_name='distilgpt2', device=device)
+    print("Done.")
+    
+    # Load templates
+    print(f"Loading templates from {template_file}...")
+    templates = pd.read_csv(template_file)
+    print("Done.")
+
+    # Generate data
+    print("Generating data...", end="")
+    variants = []
+    names_list = names.words("female.txt") + names.words("male.txt")
+    np.random.seed(3)
+    names_sample = np.random.choice(names_list, size=4)
+    print(names_sample)
+    variants = generate_data(templates, names_sample)
+    print("Done.")
+    for sent in np.random.choice(variants['text'], 10):
+        print(" - " + sent)
+
+    # Process results
+    print("Processing results...", end="")
+    uid_results = process_results(model, tokenizer, device, variants)
+    print("Done.")
+
+    print(f"Saving results to {Path(output_dir) / Path(output_file)}...", end="")
+    uid_results.to_csv(Path(output_dir) / Path(output_file), index=False)
+    print("Done.")
+
+    print("Analysis complete. Results saved to uid_results.csv.")
