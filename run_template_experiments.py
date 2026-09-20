@@ -12,10 +12,13 @@ from tqdm import tqdm
 from src.uid import *
 from src.template_generation import *
 from src.unigram import UnigramLM
+import argparse
 
 if __name__ == "__main__":
-    template_file = "./data/templates/coherent_discourse_pairs_500.csv"
-    output_dir = "."
+    parser = argparse.ArgumentParser(description='Run Active/Passive sythentic data (template) generation and UID calculation scripts.')
+    parser.add_argument("templates_dir", type=str, help="Path to folder containing .csv files with templates to process.")
+    parser.add_argument("output_dir",type=str, help="Path to folder where output files will be saved.")
+    # Optional
     output_file = "uid_results.csv"
 
     # Load model
