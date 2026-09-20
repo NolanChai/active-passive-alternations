@@ -16,9 +16,12 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run Active/Passive sythentic data (template) generation and UID calculation scripts.')
-    parser.add_argument("templates_dir", type=str, help="Path to folder containing .csv files with templates to process.")
+    parser.add_argument("templates_file", type=str, help="Path to .csv file with templates to process.")
     parser.add_argument("output_dir",type=str, help="Path to folder where output files will be saved.")
+    args, unk = parser.parse_known_args()
     # Optional
+    template_file = Path(args.templates_file)
+    output_dir = Path(args.output_dir)
     output_file = "uid_results.csv"
 
     # Load model
