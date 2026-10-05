@@ -961,7 +961,11 @@ def main():
                 extra_args[key] = value
                 
     print("Processing files from %s\nPlots will be saved to %s\n=======" % (args.data_dir, args.output_dir))
-    data_paths = Path(args.data_dir).glob('*.csv')
+    data_dir = Path(args.data_dir)
+    if data_dir.is_dir():
+        data_paths = data_dir.glob('*.csv')
+    else:
+        data_paths = [data_dir]
     output_dir = Path(args.output_dir)
     
     all_cf_comparisons = []
