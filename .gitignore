@@ -26,3 +26,7 @@ plots/*
 # testing dir
 temp/*
 test_dataset.sh
+
+# Full uid result dataframes (too large)
+*_uid.csv
+*_uid_full.csv
