@@ -8,6 +8,7 @@ dependencies = [
     "conllu>=6.0.0",
     "deplacy>=2.1.0",
     "ipykernel>=7.1.0",
+    "language-tool-python>=3.4.0",
     "matplotlib>=3.10.8",
     "nltk>=3.9.4",
     "numpy>=2.0.0",
