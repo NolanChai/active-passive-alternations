@@ -45,13 +45,13 @@ warnings.filterwarnings("ignore")
 
 # === Constants === #
 
-# context_lvls = ['document', 'sentence']
-context_lvls= ['document']
+context_lvls = ['document', 'sentence']
+# context_lvls= ['document']
 BOOTSTRAP = False
 RESAMPLE = False
 CLASS_WEIGHTS = 'balanced'
 
-#=== Metrics & Features ===#
+# === Metrics & Features === #
 
 surprisal_metric_names = [
     # 'surp_mean', # Mean surprisal
@@ -427,27 +427,28 @@ def get_cf_comparison(uid_df):
     # print(sents_of_interest.shape)
     print(" - Building cf comparison:")
     # TEMPORARY
-    from transformers import pipeline
-    classifier = pipeline(
-        "text-classification",
-        model="textattack/roberta-base-CoLA"
-    )
+    # from transformers import pipeline
+    # classifier = pipeline(
+    #     "text-classification",
+    #     model="textattack/roberta-base-CoLA"
+    # )
+    print(" - Start size:", sents_of_interest.shape)
+    
+    print(" - - Removing extra contexts:", end="")
     cf_comparison = sents_of_interest[sents_of_interest['context'].isin(context_lvls)]#.drop(columns=['raw_surps', 'raw_uni_surps'])
     print(cf_comparison.shape)
+    
     cf_comparison['factual'] = cf_comparison['factual'] == 'f'
+    
+    print(" - - Removing sentence copies by doc_id, sent_idx, context:", end="")
     cf_comparison = cf_comparison.groupby(['doc_id', 'sent_idx', 'context']).first().sort_values(by=['doc_name', 'sent_idx']).reset_index()
     print(cf_comparison.shape)
-    # TEMPORARY SUBSAMPLE
-    cf_comparison['sent_id_unique'] = cf_comparison['doc_name'] + cf_comparison['sent_idx'].astype(str) + cf_comparison['context']
-    np.random.seed(42)
-    sent_id_sample = np.random.choice(cf_comparison['sent_id_unique'], 10000, replace=False)
-    print(len(sent_id_sample))
-    cf_comparison = cf_comparison[cf_comparison['sent_id_unique'].isin(sent_id_sample)]
-    print(cf_comparison.shape)
-    cf_comparison = cf_comparison[[check_grammatical(classifier, sentence) for sentence in cf_comparison['sentence']]]
-    print(cf_comparison.shape)
+    
+    print(" - - Removing sentence copies by doc_name and sent_idx:", end="")
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).filter(lambda g: g.shape[0] >= len(context_lvls) * 2)
-    # print(cf_comparison.shape)
+    print(cf_comparison.shape)
+    
+    print(" - - Assigning passivity labels:", end="")
     cf_comparison = cf_comparison.groupby(['doc_name', 'sent_idx']).apply(check_passive).reset_index()
     print(cf_comparison.shape)
     # print(cf_comparison.apply(check_conversion, axis=1).shape)
@@ -458,11 +459,17 @@ def get_cf_comparison(uid_df):
     # print(" - - Processing Patient Prop:")
     # cf_comparison['patient_is_prop'] = cf_comparison['patient'].apply(check_proper)
     
+    print(" - - Removing unigram prob OOB:", end="")
     cf_comparison = cf_comparison[((cf_comparison['patient_unigram_logprob'] != -np.inf) & (cf_comparison['agent_unigram_logprob'] != -np.inf))]
+    print(cf_comparison.shape)
     
-    cf_comparison = cf_comparison.drop_duplicates(subset=['doc_name', 'sent_idx', 'context', 'sentence', 'units'],
+    print(" - - Removing unconverted:", end="")
+    cf_comparison = cf_comparison.drop_duplicates(subset=['doc_name', 'sent_idx', 'context', 'sentence'],
                                               keep=False)
+    print(cf_comparison.shape)
+    print(cf_comparison['factual'].value_counts())
     
+    print(" - - Standardizing")
     standard_scaler = StandardScaler()
     to_standardize = (['patient_len',
                          'agent_len',
@@ -988,13 +995,20 @@ def main():
     if args.cf_comparison_path:
         cf_comparison = pd.read_csv(args.cf_comparison_path)
     else:
+        print("Creating cf comparison...")
         cf_comparison = get_cf_comparison(uid_df)
+        print("Complete")
         cf_comparison.to_csv(output_dir / ("cf_comparison%s.csv" % plot_suffix))
+        print(f"Data saved to {output_dir / ("cf_comparison%s.csv" % plot_suffix)}")
+        print()
     if args.pw_diffs_path:
         pw_diffs = pd.read_csv(args.pw_diffs_path)
     else:
+        print("Creating pw diffs...")
         pw_diffs = get_pw_diffs(cf_comparison)
+        print("Complete")
         pw_diffs.to_csv(output_dir / ("pw_diffs%s.csv" % plot_suffix))
+        print(f"Data saved to {output_dir / ("pw_diffs%s.csv" % plot_suffix)}")
     
     plot_f_v_cf(cf_comparison, plot_suffix, output_dir)
     plot_diffs(pw_diffs, plot_suffix, output_dir)
