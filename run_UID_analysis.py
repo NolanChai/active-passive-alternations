@@ -339,6 +339,8 @@ def evaluate_model(model, X, y, plot=None, output_dir=None, plot_suffix=None):
     acc = accuracy_score(y, y_pred)
     naive = max(np.mean(y), np.mean(1 - np.array(y)))
     log_likelihood = -log_loss(y, y_score, normalize=False)
+    log_loss_score = log_loss(y, y_score)
+    n = len(y)
     act_acc = cm[0][0] / (cm[0][0] + cm[0][1])
     pass_acc = cm[1][1] / (cm[1][0] + cm[1][1])
     macro_acc = (act_acc + pass_acc) / 2
@@ -358,11 +360,14 @@ def evaluate_model(model, X, y, plot=None, output_dir=None, plot_suffix=None):
                     **save_kwargs)
         results_file = output_dir / ("%s_test_results%s.txt" % (plot, plot_suffix))
         with open(results_file, 'w') as outfile:
-            outfile.writelines(["Naive Acc: %.4f\n" % naive,
+            outfile.writelines([
+                "N: %f\n" % n,
+                "Naive Acc: %.4f\n" % naive,
                 "Accuracy: %.4f\n" % acc,
                 "Macro Acc: %.4f\n" % macro_acc,
                 "ROC-AUC: %.4f\n" % roc_auc,
                 "Log like.: %.4f\n" % log_likelihood,
+                "Log Loss: %.4f\n" % log_loss_score,
             ])
     
     return cm, roc_auc, acc
