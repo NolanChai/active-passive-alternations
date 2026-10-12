@@ -127,7 +127,7 @@ ling_features_formatted = [
 uid_features = [
         'uid_std',
         # 'uid_mad',
-        'uid_pwd',
+        # 'uid_pwd',
         # 'uid_range',
         # 'uid_cv'
 ]
@@ -135,7 +135,7 @@ uid_features = [
 uid_features_formatted = [
         'Surp. STD',
         # 'Surp. MAD',
-        'Local Var.',
+        # 'Local Var.',
         # 'Surp. Range',
         # 'Surp. CV', # Coeff. of Variation
 ]
@@ -1045,11 +1045,11 @@ def main():
                                                                                             override_features=['uid_std'])
     logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
                                     output_dir, ("_uid_std" + plot_suffix))
-    # = Local Var. = # 
-    X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
-                                                                                            override_features=['uid_pwd'])
-    logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
-                                    output_dir, ("_uid_pwd" + plot_suffix))
+    # # = Local Var. = # 
+    # X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
+    #                                                                                         override_features=['uid_pwd'])
+    # logistic_regression_experiments(X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy, 
+    #                                 output_dir, ("_uid_pwd" + plot_suffix))
     # = -SLOR = #
     X, y, X_train, X_test, y_train, y_test, naive_baseline_accuracy = setup_regression_data(pw_diffs_regression,
                                                                                             override_features=['surp_slor'])
