@@ -61,7 +61,7 @@ surprisal_metric_names = [
 uid_metric_names = [
     'uid_std', # Std. of surprisal
     # 'uid_mad', # mean avg. deviation of surprisal
-    'uid_pwd', # Local variance (pairwise euc. distance)
+    # 'uid_pwd', # Local variance (pairwise euc. distance)
     # 'uid_range', # Range of surprisal
     # 'uid_len' # Length of sentence (units)
     # 'uid_slope', # Slope of a linear function fit to surp values
@@ -75,7 +75,7 @@ surprisal_metrics_formatted = [
 uid_metrics_formatted = [
     'Surp. STD',
     # 'Surp. MAD',
-    'Local Var.',
+    # 'Local Var.',
     # 'Surp. Range',
     # 'Length',
     # 'LinReg Slope',
@@ -977,6 +977,14 @@ def main():
         uid_df = pd.read_csv(args.uid_df_path)
         uid_unit, uid_level = Path(args.uid_df_path).stem.split("_")[1:3]
         plot_suffix=("_%s_%s" % (uid_unit, uid_level))
+    elif args.pw_diffs_path:
+        print("PW diffs provided. Skipping UID loading step...")
+        uid_unit, uid_level = Path(args.pw_diffs_path).stem.split("_")[2:4]
+        plot_suffix=("_%s_%s" % (uid_unit, uid_level))
+    elif args.cf_comparison_path:
+        print("CF comparison provided. Skipping UID loading step...")
+        uid_unit, uid_level = Path(args.cf_comparison_path).stem.split("_")[2:4]
+        plot_suffix=("_%s_%s" % (uid_unit, uid_level))
     else:
         for idx, data_path in enumerate(data_paths):
             print("Reading in data from doc %d: %s" % (idx, data_path))
@@ -998,6 +1006,8 @@ def main():
     
     if args.cf_comparison_path:
         cf_comparison = pd.read_csv(args.cf_comparison_path)
+    elif args.pw_diffs_path:
+        print("PW diffs provided. Skipping CF comparison step...")
     else:
         print("Creating cf comparison...")
         cf_comparison = get_cf_comparison(uid_df)
